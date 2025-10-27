@@ -1,0 +1,194 @@
+import { serveStatic } from '@hono/node-server/serve-static'
+import { trpcServer } from '@hono/trpc-server'
+import { zValidator } from '@hono/zod-validator'
+import { initTRPC, type inferRouterInputs, type inferRouterOutputs } from '@trpc/server'
+import { Hono } from 'hono'
+import { logger as loggerMiddleware } from 'hono/logger'
+import { mimes } from 'hono/utils/mime'
+import { z } from 'zod'
+
+import { DEBUG, logger } from './lib/logger'
+import { fetchUpcomingEvents } from './lib/prts.wiki'
+import { reportSchema, scheduleSchema, TASK_TYPE } from './lib/schema'
+import { MaaManager, type ScheduleData, type TaskData } from './MaaManager'
+
+interface VariablesContext {
+  manager: MaaManager
+}
+
+const managers = new Map<string, MaaManager>()
+
+export const manager = new MaaManager('bdc57941058a47e6bf56f2a993c87af3', 'user')
+
+manager.addSchedule({ task: 'HeartBeat', hour: 0 })
+manager.addSchedule({ task: 'LinkStart', hour: 3 })
+manager.addSchedule({ task: 'LinkStart', hour: 11 })
+manager.addSchedule({ task: 'LinkStart', hour: 19 })
+
+managers.set(manager.device, manager)
+
+/**
+ * Initialize tRPC with SSE support for subscriptions
+ */
+const t = initTRPC.context<VariablesContext>().create({
+  sse: {
+    ping: {
+      enabled: true,
+      intervalMs: 2_000,
+    },
+  },
+})
+
+/**
+ * Main application router combining all sub-routers
+ */
+export const router = t.router({
+  // Manager control procedures
+  start: t.procedure.mutation(async ({ ctx: { manager } }) => manager.start()),
+  stop: t.procedure.mutation(async ({ ctx: { manager } }) => manager.stop()),
+  heartbeat: t.procedure.query(async ({ ctx: { manager } }) =>
+    manager
+      .create('HeartBeat')
+      .waitFor('DONE')
+      .then(() => true)
+      .catch(() => false),
+  ),
+  isLocked: t.procedure.query(({ ctx: { manager } }) => manager.locked),
+  toggleLock: t.procedure
+    .input(z.boolean())
+    .mutation(async ({ ctx: { manager }, input }) => (input ? manager.lock() : manager.unlock())),
+  // Schedule management procedures
+  schedules: t.procedure.query(({ ctx: { manager } }) => manager.schedules.map((s) => s.data)),
+  addSchedule: t.procedure.input(scheduleSchema).mutation(({ ctx: { manager }, input }) => {
+    const schedule = manager.addSchedule(input)
+    return { success: true, message: 'Schedule created', schedule }
+  }),
+  removeSchedule: t.procedure
+    .input(z.string())
+    .mutation(({ ctx: { manager }, input }) => manager.removeSchedule(input)),
+  schedule: {
+    get: t.procedure.query(({ ctx: { manager } }) => manager.schedules.map((s) => s.data)),
+    add: t.procedure
+      .input(scheduleSchema)
+      .mutation(({ ctx: { manager }, input }) => manager.addSchedule(input)),
+    remove: t.procedure
+      .input(z.string())
+      .mutation(({ ctx: { manager }, input }) => manager.removeSchedule(input)),
+  },
+
+  /**
+   * Dispatch a custom task
+   */
+  dispatch: t.procedure
+    .input(
+      z.object({
+        task: z.enum(TASK_TYPE),
+        params: z.string().optional(),
+      }),
+    )
+    .mutation(({ ctx, input }) => {
+      const task = ctx.manager.create(input.task, input.params)
+      return { success: true, task: task.data }
+    }),
+
+  // state: t.procedure.query(({ ctx }) => ctx.manager.state),
+
+  /**
+   * Subscription for real-time task updates
+   * Emits task data whenever task state changes
+   */
+  state: t.procedure.subscription(({ ctx, signal }) => ctx.manager.listen('update', { signal })),
+
+  /**
+   * Subscription for real-time screenshot monitoring
+   */
+  screenshot: t.procedure.subscription(({ ctx, signal }) =>
+    ctx.manager.listen('screenshot', { signal }),
+  ),
+  screenshotQuery: t.procedure.query(async ({ ctx }) => {
+    const { payload } = await ctx.manager.create('CaptureImageNow').waitFor('DONE')
+    if (!payload) throw new Error('Failed to capture screenshot')
+    return payload
+  }),
+
+  deviceLog: t.procedure.subscription(async function* ({ ctx, signal }) {
+    yield ctx.manager.logs.slice(-50)
+    yield* ctx.manager.listen('deviceLog', { signal })
+  }),
+
+  eventCalendar: t.procedure.query(async () => fetchUpcomingEvents()),
+})
+
+/**
+ * Export type for use in client
+ */
+export type TRPCRouter = typeof router
+
+export type RouterInput = inferRouterInputs<TRPCRouter>
+export type RouterOutput = inferRouterOutputs<TRPCRouter>
+
+export const app = new Hono<{ Variables: VariablesContext }>()
+  .use('/trpc/*', trpcServer({ router, createContext: () => ({ manager }) }))
+  // MAA remote control protocol endpoints
+  // https://docs.maa.plus/zh-cn/protocol/remote-control-schema.html#获取任务端点
+  .post('/maa/getTask', (c) => {
+    try {
+      const tasks = manager.getTask()
+      logger.debug('Providing tasks to MAA client:', tasks)
+      return c.json({ tasks })
+    } catch (error) {
+      logger.error('Failed to get tasks:', error)
+      return c.json({ tasks: [] }, 500)
+    }
+  })
+  // https://docs.maa.plus/zh-cn/protocol/remote-control-schema.html#汇报任务端点
+  .post('/maa/reportStatus', zValidator('json', reportSchema), (c) => {
+    try {
+      const data = c.req.valid('json')
+      logger.debug('Reporting task status:', data.task, data.status, data.payload?.slice(0, 30))
+      const task = manager.reportStatus(data)
+      if (task) return c.text('success')
+    } catch (error) {
+      logger.error('Failed to report task status:', error)
+      return c.text('internal server error', 500)
+    }
+    return c.text('task not found', 404)
+  })
+  // https://github.com/MaaAssistantArknights/MaaAssistantArknights/blob/dev/src/MaaWpfGui/Services/Notification/ExternalNotificationService.cs
+  .post('/maa/deviceLog', async (c) => {
+    const text = await c.req.text()
+    try {
+      manager.deviceLog(text)
+      return c.json({ success: true })
+    } catch (error) {
+      logger.error(`Failed to report MAA Log:\n`, error)
+      return c.json({ success: false, error: JSON.stringify(error) }, 500)
+    }
+  })
+  // task control endpoints
+  .get('/maa/screenshot', async (c) => {
+    const { id, payload } = await manager.create('CaptureImageNow').waitFor('DONE')
+    if (!payload) return c.json({ error: 'Failed to capture screenshot' }, 500)
+
+    const image = Buffer.from(payload, 'base64')
+    manager.tasks.delete(id)
+    return c.body(image, 200, {
+      'Content-Type': mimes.png,
+      'Content-Length': image.length.toString(),
+    })
+  })
+  // management endpoints
+  .get('/maa/lock', async (c) => c.text((await manager.lock()).message))
+  .get('/maa/unlock', async (c) => c.text((await manager.unlock()).message))
+
+// In development, redirect all other routes to the Vite dev server
+if (import.meta.env.DEV) app.get('*', (c) => c.redirect('http://localhost:3113'))
+// In production, serve static files from the public directory
+else app.use(serveStatic({ root: 'dist/public', index: 'index.html' }))
+
+// Apply logging middleware in debug mode
+if (DEBUG) app.use(loggerMiddleware())
+
+export * from './lib/schema'
+export default app
+export type { ScheduleData, TaskData }

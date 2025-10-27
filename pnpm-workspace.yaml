@@ -1,0 +1,11 @@
+packages:
+  - server
+  - client
+
+cleanupUnusedCatalogs: true
+
+onlyBuiltDependencies:
+  - '@tailwindcss/oxide'
+  - esbuild
+  - simple-git-hooks
+  - unrs-resolver

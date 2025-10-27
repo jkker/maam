@@ -1,0 +1,56 @@
+{
+  "name": "maam",
+  "type": "module",
+  "scripts": {
+    "dev": "pnpm -r --parallel dev",
+    "build": "pnpm -r build",
+    "start": "pnpm -F @maam/server start",
+    "lint": "eslint",
+    "lint:fix": "eslint --fix .",
+    "format": "prettier --check .",
+    "format:fix": "prettier --write .",
+    "typecheck": "pnpm -r typecheck",
+    "test": "vitest",
+    "test:watch": "vitest --watch",
+    "ci": "pnpm build && pnpm lint && pnpm typecheck && pnpm test",
+    "maam": "git pull && pnpm install --frozen-lockfile && pnpm build && pnpm start"
+  },
+  "devDependencies": {
+    "@eslint-react/eslint-plugin": "^2.1.1",
+    "@eslint/compat": "^1.4.0",
+    "@eslint/js": "^9.37.0",
+    "@types/node": "^22.18.10",
+    "@types/react": "^19.2.2",
+    "@types/react-dom": "^19.2.2",
+    "@vitest/eslint-plugin": "^1.3.20",
+    "eslint": "^9.36.0",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-import-resolver-typescript": "^4.4.4",
+    "eslint-plugin-import-x": "^4.16.1",
+    "eslint-plugin-react-hooks": "^7.0.0",
+    "eslint-plugin-react-refresh": "^0.4.24",
+    "eslint-plugin-unused-imports": "^4.2.0",
+    "globals": "^16.4.0",
+    "lint-staged": "^16.2.4",
+    "prettier": "^3.6.2",
+    "simple-git-hooks": "^2.13.1",
+    "typescript": "~5.9.3",
+    "typescript-eslint": "^8.46.0",
+    "vite": "npm:rolldown-vite@7.1.17",
+    "vitest": "^3.2.4"
+  },
+  "simple-git-hooks": {
+    "pre-commit": "pnpm lint-staged"
+  },
+  "lint-staged": {
+    "*.{js,ts,jsx,tsx}": [
+      "bash -c 'tsc --noEmit'",
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "*.{json,md,css,html,yml,yaml}": [
+      "prettier --write"
+    ]
+  },
+  "packageManager": "pnpm@10.19.0+sha512.c9fc7236e92adf5c8af42fd5bf1612df99c2ceb62f27047032f4720b33f8eacdde311865e91c411f2774f618d82f320808ecb51718bfa82c060c4ba7c76a32b8"
+}

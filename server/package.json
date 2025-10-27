@@ -1,0 +1,40 @@
+{
+  "name": "@maam/server",
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "start": "node ./dist/server.js",
+    "typecheck": "tsc --noEmit"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "dependencies": {
+    "@hono/node-server": "^1.19.5",
+    "@hono/trpc-server": "^0.4.0",
+    "@hono/zod-validator": "^0.7.4",
+    "@trpc/server": "^11.7.0",
+    "cheerio": "^1.1.2",
+    "hono": "^4.10.3",
+    "rotating-file-stream": "^3.2.7",
+    "temporal-polyfill": " ^0.3.0",
+    "toad-scheduler": "^3.1.0",
+    "tslog": "^4.10.2",
+    "zod": "^4.1.12"
+  },
+  "devDependencies": {
+    "@hono/vite-dev-server": "^0.23.0",
+    "@types/node": "^22.18.10",
+    "@types/react": "^19.2.2",
+    "typescript": "~5.9.3",
+    "vite": "npm:rolldown-vite@7.1.17",
+    "vite-plugin-dts": "^4.5.4"
+  }
+}
