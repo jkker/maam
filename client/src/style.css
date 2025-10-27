@@ -47,13 +47,6 @@
     'Courier New', monospace;
 }
 
-@layer components {
-  button,
-  a {
-    @apply transition-all cursor-pointer;
-  }
-}
-
 @theme inline {
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
@@ -167,6 +160,9 @@
   }
   body {
     @apply bg-background text-foreground;
+  }
+  #root {
+    @apply min-h-screen flex flex-col;
   }
 }
 

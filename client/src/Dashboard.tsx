@@ -98,13 +98,9 @@ export default function Dashboard() {
         </div>
 
         <TaskManager tasks={tasks} className="col-span-full lg:col-span-6" />
-
-        <ScheduleManager connected={connected} className="col-span-full lg:col-span-6" />
-
         <LogViewer className="col-span-full lg:col-span-6" />
-
+        <ScheduleManager className="col-span-full lg:col-span-6" />
         <TaskStatistics tasks={tasks} className="md:col-span-4 lg:col-span-6" />
-
         <ConfigViewer className="col-span-full lg:col-span-6" />
       </main>
       <Footer />

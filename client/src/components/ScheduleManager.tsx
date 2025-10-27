@@ -32,13 +32,7 @@ const queryKey = trpc.schedule.get.queryKey()
 
 const browserTz = Temporal.Now.timeZoneId()
 
-export const ScheduleManager = ({
-  connected,
-  className,
-}: {
-  connected: boolean
-  className?: string
-}) => {
+export const ScheduleManager = ({ className }: { className?: string }) => {
   const { resolvedTheme } = useTheme()
 
   const [datetimeToAdd, setDateTimeToAdd] = useState<Temporal.ZonedDateTime>()
@@ -193,7 +187,6 @@ export const ScheduleManager = ({
           <Button
             className="ml-auto"
             onClick={() => setDateTimeToAdd(Temporal.Now.zonedDateTimeISO())}
-            disabled={!connected}
             size="icon"
             variant="secondary"
           >
