@@ -120,21 +120,13 @@ export default function Dashboard() {
         )}
 
         {/* Screenshot - Left side on desktop, full width on mobile/tablet */}
-        <ScreenshotViewer
-          className="col-span-full md:col-span-full lg:col-span-8 lg:row-span-2"
-          connected={connected}
-        />
+        <ScreenshotViewer className="col-span-full" connected={connected} />
 
         {/* Quick Actions - Top right on desktop, full width on smaller screens */}
-        <Card className="col-span-full md:col-span-3 lg:col-span-4 p-4 flex flex-col gap-3">
+        <div className="col-span-full gap-4 grid grid-cols-1 md:grid-cols-2">
           <QuickActions locked={isLocked} connected={connected} />
           <LockToggle isLocked={isLocked} connected={connected} />
-        </Card>
-
-        {/* Task Statistics - Right side below Quick Actions */}
-        <Card className="col-span-full md:col-span-3 lg:col-span-4 p-0 md:p-0">
-          <TaskStatistics tasks={tasks} />
-        </Card>
+        </div>
 
         {/* Task Manager - Left column on desktop */}
         <TaskManager tasks={tasks} className="col-span-full lg:col-span-6" />
@@ -268,85 +260,39 @@ function QuickActions({ locked, connected }: { locked: boolean; connected: boole
     }),
   )
   return (
-    <div className="flex flex-col gap-2 w-full">
-      <h3 className="text-sm font-semibold text-muted-foreground">Quick Actions</h3>
-      <ButtonGroup className="w-full">
-        <Button
-          onClick={() => start.mutate()}
-          disabled={locked || !connected || start.isPending}
-          className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-3 font-medium transition-all duration-200 bg-blue-600 hover:bg-blue-700 text-white shadow-lg shadow-blue-500/30 hover:shadow-xl hover:shadow-blue-500/40 hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
-        >
-          <Play className="w-4 h-4" />
-          <span>{start.isPending ? 'Starting...' : 'Start'}</span>
-        </Button>
-        <Button
-          onClick={() => stop.mutate()}
-          disabled={!connected || stop.isPending}
-          className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-3 font-medium transition-all duration-200 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          <Square className="w-4 h-4" />
-          <span>{stop.isPending ? 'Stopping...' : 'Stop'}</span>
-        </Button>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild disabled={!connected}>
-            <Button className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-3 font-medium transition-all duration-200 bg-linear-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white shadow-lg shadow-purple-500/30 hover:shadow-xl hover:shadow-purple-500/40 hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100">
-              <Plus className="w-4 h-4" />
-              <span>Task</span>
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent>
-            {TASK_TYPE.map((task) => (
-              <DropdownMenuItem key={task} onSelect={() => dispatch.mutate({ task })}>
-                {formatTaskType(task)}
-              </DropdownMenuItem>
-            ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </ButtonGroup>
-    </div>
-  )
-}
-
-function TaskStatistics({ tasks, className }: { tasks: TaskData[]; className?: string }) {
-  const successCount = tasks.filter((t) => t.status === 'SUCCESS').length
-  const failedCount = tasks.filter((t) => t.status === 'FAILED').length
-  const successRate =
-    successCount + failedCount > 0
-      ? ((successCount / (successCount + failedCount)) * 100).toFixed()
-      : 0
-
-  const tasksWithDuration = tasks.filter((t) => t.duration !== undefined)
-  const avgDuration =
-    tasksWithDuration.length > 0
-      ? tasksWithDuration.reduce((sum, t) => sum + (t.duration || 0), 0) / tasksWithDuration.length
-      : 0
-
-  return (
-    <Card className={cn('flex flex-col h-full', className)}>
-      <CardHeader className="pb-3">
-        <CardTitle className="text-sm font-medium text-muted-foreground">Task Statistics</CardTitle>
-      </CardHeader>
-      <CardContent className="flex-1 grid grid-cols-2 gap-4 p-4 pt-0">
-        <div className="text-center">
-          <div className="text-2xl font-bold text-green-500">{successCount}</div>
-          <div className="text-xs text-muted-foreground">Success</div>
-        </div>
-        <div className="text-center">
-          <div className="text-2xl font-bold text-red-500">{failedCount}</div>
-          <div className="text-xs text-muted-foreground">Failed</div>
-        </div>
-        <div className="text-center">
-          <div className="text-2xl font-bold text-sky-500">{successRate}%</div>
-          <div className="text-xs text-muted-foreground">Completed</div>
-        </div>
-        <div className="text-center">
-          <div className="text-2xl font-bold text-yellow-500">
-            {avgDuration > 0 ? formatDuration(avgDuration) : '-'}
-          </div>
-          <div className="text-xs text-muted-foreground">Avg Duration</div>
-        </div>
-      </CardContent>
-    </Card>
+    <ButtonGroup className="w-full">
+      <Button
+        onClick={() => start.mutate()}
+        disabled={locked || !connected || start.isPending}
+        className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-3 font-medium transition-all duration-200 bg-blue-600 hover:bg-blue-700 text-white shadow-lg shadow-blue-500/30 hover:shadow-xl hover:shadow-blue-500/40 hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
+      >
+        <Play className="w-4 h-4" />
+        <span>{start.isPending ? 'Starting...' : 'Start'}</span>
+      </Button>
+      <Button
+        onClick={() => stop.mutate()}
+        disabled={!connected || stop.isPending}
+        className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-3 font-medium transition-all duration-200 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
+      >
+        <Square className="w-4 h-4" />
+        <span>{stop.isPending ? 'Stopping...' : 'Stop'}</span>
+      </Button>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild disabled={!connected}>
+          <Button className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-3 font-medium transition-all duration-200 bg-linear-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white shadow-lg shadow-purple-500/30 hover:shadow-xl hover:shadow-purple-500/40 hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100">
+            <Plus className="w-4 h-4" />
+            <span>Task</span>
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent>
+          {TASK_TYPE.map((task) => (
+            <DropdownMenuItem key={task} onSelect={() => dispatch.mutate({ task })}>
+              {formatTaskType(task)}
+            </DropdownMenuItem>
+          ))}
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </ButtonGroup>
   )
 }
 
@@ -530,31 +476,28 @@ function LockToggle({
   )
 
   return (
-    <div className={cn('flex flex-col gap-2', className)}>
-      <h3 className="text-sm font-semibold text-muted-foreground">Manager Control</h3>
-      <Button
-        onClick={() => mutate(!isLocked)}
-        className="w-full"
-        disabled={!connected || isPending}
-        variant={isLocked ? 'default' : 'destructive'}
-        size="lg"
-      >
-        {isPending ? (
-          <Spinner />
-        ) : isLocked ? (
-          <LockIcon className="size-4 mr-2" />
-        ) : (
-          <UnlockIcon className="size-4 mr-2" />
-        )}
-        {isPending
-          ? variables
-            ? 'Locking...'
-            : 'Unlocking...'
-          : isLocked
-            ? 'Unlock Manager'
-            : 'Lock Manager'}
-      </Button>
-    </div>
+    <Button
+      onClick={() => mutate(!isLocked)}
+      className="w-full"
+      disabled={!connected || isPending}
+      variant={isLocked ? 'default' : 'destructive'}
+      size="lg"
+    >
+      {isPending ? (
+        <Spinner />
+      ) : isLocked ? (
+        <LockIcon className="size-4 mr-2" />
+      ) : (
+        <UnlockIcon className="size-4 mr-2" />
+      )}
+      {isPending
+        ? variables
+          ? 'Locking...'
+          : 'Unlocking...'
+        : isLocked
+          ? 'Unlock Manager'
+          : 'Lock Manager'}
+    </Button>
   )
 }
 

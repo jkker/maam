@@ -178,4 +178,7 @@
   .is-dark {
     --sx-color-background: var(--color-card);
   }
+  .sx__calendar {
+    border-right: 0;
+  }
 }

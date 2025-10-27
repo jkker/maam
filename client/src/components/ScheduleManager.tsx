@@ -203,7 +203,9 @@ export const ScheduleManager = ({
         </CardTitle>
       </CardHeader>
 
-      <ScheduleXCalendar calendarApp={calendar} />
+      <div className="pr-4">
+        <ScheduleXCalendar calendarApp={calendar} />
+      </div>
 
       {datetimeToAdd && (
         <AddScheduleDialog

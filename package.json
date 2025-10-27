@@ -4,7 +4,9 @@
   "scripts": {
     "dev": "pnpm -r --parallel dev",
     "build": "pnpm -r build",
+    "build:docker": "docker build -t maam . && mkdir -p dist && docker save -o dist/maam.tar maam",
     "start": "pnpm -F @maam/server start",
+    "start:docker": "docker run -p 3113:3113 maam",
     "lint": "eslint",
     "lint:fix": "eslint --fix .",
     "format": "prettier --check .",
