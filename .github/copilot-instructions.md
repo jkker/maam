@@ -1,30 +1,147 @@
 ## Project Overview
 
-This is a **monorepo** implementing a web server and dashboard for the [MAA (MaaFramework) remote control protocol](https://docs.maa.plus/zh-cn/protocol/remote-control-schema.html). The project consists of two packages:
+This is a **pnpm monorepo** implementing a web server and dashboard for the [MAA (MaaFramework) remote control protocol](https://docs.maa.plus/zh-cn/protocol/remote-control-schema.html). The project consists of two packages:
 
-- **@maam/server**: Hono-based HTTP server implementing MAA protocol endpoints (`server/src/`)
-- **@maam/client**: React dashboard for managing tasks and schedules (`client/src/`)
+- **@maam/server**: Hono-based HTTP server with tRPC API implementing MAA protocol endpoints (`server/src/`)
+- **@maam/client**: React dashboard using shadcn/ui components for managing tasks and schedules (`client/src/`)
 
-The server acts as a remote control endpoint for MAA client applications, managing task dispatch, scheduling, and authorization.
+The server acts as a remote control endpoint for MAA client applications, managing task dispatch, scheduling, and authorization. Real-time updates are delivered via Server-Sent Events (SSE) through tRPC subscriptions.
 
 ## Architecture & Key Files
 
 ### Server Package (`server/src/`)
 
-- **`index.ts`**: Main application entry point. Defines all HTTP routes (`/maa/*` API endpoints) and exports the `app` instance and default `manager`
+- **`index.ts`**: Main application entry point
+  - Defines tRPC router with procedures for all dashboard operations
+  - Exports `TRPCRouter` type for client-side type inference
+  - Implements HTTP endpoints for MAA protocol compliance (`/maa/*`)
+  - Exports `app` (Hono instance) and default `manager` (MaaManager instance)
+  - Uses `@hono/trpc-server` middleware for tRPC integration with SSE support
 - **`server.ts`**: Production server entry using `@hono/node-server`, listens on `0.0.0.0:3113`
-- **`MaaManager.ts`**: Core orchestration class managing tasks, queues, scheduling, and device authorization
-- **`lib/schema.ts`**: Zod schemas and TypeScript types for MAA protocol (task types, stages, validation)
-- **`lib/logger.ts`**: Logging utilities using tslog
+
+- **`MaaManager.ts`**: Core orchestration class
+  - Manages `tasks: Map<id, Task>` - all task instances
+  - Manages `queue: Task[]` - pending tasks awaiting MAA client polling
+  - Manages `scheduler: ToadScheduler` - cron job engine
+  - Manages `schedules: TaskSchedule[]` - active schedule instances
+  - Manages `logs: string[]` - device log buffer (max 100 entries)
+  - Provides `listen(event, options)` method for SSE-compatible async generators
+  - Emits `'update'` event on task state changes (via `EventEmitter`)
+  - Emits `'screenshot'` event when `CaptureImageNow` task completes
+  - Emits `'deviceLog'` event when MAA client sends logs
+- **`lib/schema.ts`**: Zod schemas and TypeScript types
+  - `TASK_TYPE` - Array of all supported task types
+  - `IMMEDIATE_TASK` - Subset of synchronous task types (`HeartBeat`, `StopTask`, `CaptureImageNow`)
+  - `TASK_STAGE`, `TASK_STATUS` - Enums for task lifecycle states
+  - `reportSchema`, `deviceSchema`, `scheduleSchema`, `taskSchema` - Validation schemas
+  - Types: `TaskData`, `TaskType`, `ImmediateTask`, `TaskStage`, `Schedule`, `ScheduleData`
+- **`lib/logger.ts`**: Logging utilities using `tslog` with file rotation via `rotating-file-stream`
+
+- **`lib/temporal.ts`**: Temporal API utilities for timezone-aware datetime handling
+
+- **`lib/prts.wiki.ts`**: Web scraper using `cheerio` to fetch official Arknights events from PRTS Wiki
 
 ### Client Package (`client/src/`)
 
 - **`main.tsx`**: React app entry point
-- **`App.tsx`**: Main dashboard component using TanStack Query for server state management
-- **`Layout.tsx`**: Header and footer components for the UI
-- Builds to `server/dist/public/` and served as static assets via `serveStatic` middleware
+  - Wraps app in `QueryClientProvider` (TanStack Query)
+  - Provides `ThemeProvider` for dark mode support
+  - Renders `Dashboard` component and `Toaster` (Sonner notifications)
+- **`Dashboard.tsx`**: Main dashboard component
+  - Uses `useSubscription` for real-time task/log updates via SSE
+  - Uses `useQuery` for screenshot, lock state, and heartbeat polling
+  - Uses `useMutation` for task dispatch, lock toggle
+  - Renders all dashboard sections: screenshot, quick actions, tasks, logs, schedule, stats, config
+- **`Layout.tsx`**: Header and footer components with responsive navigation
 
-## Task System
+- **`components/ScheduleManager.tsx`**: Calendar integration
+  - Uses `@schedule-x/calendar` with React hooks (`useCalendarApp`)
+  - Implements `ScheduleXCalendar` with daily/weekly/list views
+  - Integrates with tRPC for schedule CRUD operations
+  - Displays official events from `prts.wiki.ts` alongside user schedules
+  - Uses shadcn/ui Dialog for add/edit schedule forms
+- **`components/ui/`**: shadcn/ui components
+  - Radix UI primitives styled with Tailwind
+  - Components: `accordion`, `alert`, `badge`, `button`, `card`, `dialog`, `dropdown-menu`, `field`, `form`, `input`, `label`, `popover`, `scroll-area`, `select`, `separator`, `skeleton`, `sonner`, `spinner`, `switch`, `tabs`, `textarea`, `toggle`
+  - Configured via `client/components.json` (New York style, Lucide icons)
+- **`lib/trpc.ts`**: tRPC client configuration
+  - Creates `trpcClient` with `splitLink` for SSE subscriptions vs HTTP batch requests
+  - Exports `trpc` options proxy for type-safe query/mutation/subscription hooks
+  - Exports `queryClient` (TanStack Query instance)
+- **`utils.ts`**: Utility functions
+  - `formatDuration(ms)` - Formats duration in human-readable units
+  - `formatTime(timestamp)` - Formats ISO 8601 to locale-aware datetime
+  - `formatTaskType(type)` - Maps task types to Chinese display names
+  - Re-exports `cn` from `lib/utils.ts` (Tailwind merge utility)
+- **Builds to**: `server/dist/public/` (served as static assets via `serveStatic` middleware)
+
+## tRPC Router Structure
+
+The tRPC router in `server/src/index.ts` uses Server-Sent Events (SSE) for real-time subscriptions:
+
+### Initialization
+
+```ts
+const t = initTRPC.context<VariablesContext>().create({
+  sse: {
+    ping: { enabled: true, intervalMs: 2_000 },
+  },
+})
+```
+
+### Procedures
+
+#### Manager Control
+
+- `start` (mutation) → calls `manager.start()` (creates `LinkStart` task)
+- `stop` (mutation) → calls `manager.stop()` (creates `StopTask` immediate task)
+- `heartbeat` (query) → creates `HeartBeat`, waits for `DONE`, returns boolean
+- `isLocked` (query) → returns `manager.locked` boolean
+- `toggleLock` (mutation) → input `boolean`, calls `manager.lock()` or `manager.unlock()`
+
+#### Task Management
+
+- `dispatch` (mutation) → input `{ task: TaskType, params?: string }`, creates task immediately
+- `state` (subscription) → SSE stream, emits `{ tasks: TaskData[] }` on `manager` `'update'` events
+
+#### Schedule Management
+
+- `schedules` (query) → returns `manager.schedules.map(s => s.data)`
+- `addSchedule` (mutation) → input `scheduleSchema`, calls `manager.addSchedule()`
+- `removeSchedule` (mutation) → input `string` (schedule ID), calls `manager.removeSchedule()`
+- `schedule.get` / `schedule.add` / `schedule.remove` → aliases for above
+
+#### Screenshot & Logs
+
+- `screenshot` (subscription) → SSE stream, emits base64 PNG on `'screenshot'` events
+- `screenshotQuery` (query) → creates `CaptureImageNow`, waits for `DONE`, returns base64 PNG
+- `deviceLog` (subscription) → SSE stream, yields last 50 logs, then emits on `'deviceLog'` events
+
+#### Event Calendar
+
+- `eventCalendar` (query) → fetches official Arknights events from PRTS Wiki via `fetchUpcomingEvents()`
+
+### Client Usage Pattern
+
+In `client/src/Dashboard.tsx` and `client/src/components/ScheduleManager.tsx`:
+
+```tsx
+// Queries (useQuery)
+const { data, isLoading } = useQuery(trpc.heartbeat.queryOptions())
+const { data: isLocked } = useQuery(trpc.isLocked.queryOptions())
+const { data: schedules = [] } = useQuery(trpc.schedule.get.queryOptions())
+
+// Mutations (useMutation)
+const start = useMutation(trpc.start.mutationOptions({ onSuccess: ... }))
+const dispatch = useMutation(trpc.dispatch.mutationOptions())
+const addSchedule = useMutation(trpc.addSchedule.mutationOptions())
+
+// Subscriptions (useSubscription) - SSE-based real-time updates
+const { data: { tasks = [] } = {} } = useSubscription(trpc.state.subscriptionOptions())
+const { data: logs = [] } = useSubscription(trpc.deviceLog.subscriptionOptions())
+```
+
+SSE subscriptions automatically reconnect on disconnect and maintain persistent connections for live updates.
 
 ### Task Lifecycle
 
@@ -146,7 +263,59 @@ Key exports:
 
 When adding new task types, add to `TASK_TYPE` (and `IMMEDIATE_TASK` if synchronous).
 
-## Development & Tooling
+## Type Safety & tRPC Integration
+
+- Server exports `TRPCRouter` type from `server/src/index.ts` for client-side inference
+- Client creates type-safe hooks via `createTRPCOptionsProxy<TRPCRouter>`
+- Schemas in `@maam/server/schema` can be imported by external consumers
+- Full end-to-end type safety: mutations, queries, and subscriptions are fully typed
+- SSE subscriptions use `httpSubscriptionLink` with automatic type inference
+
+### tRPC Client Setup
+
+```tsx
+// lib/trpc.ts
+import { createTRPCClient, splitLink, httpBatchLink, httpSubscriptionLink } from '@trpc/client'
+import { createTRPCOptionsProxy } from '@trpc/tanstack-react-query'
+
+export const trpcClient = createTRPCClient<TRPCRouter>({
+  links: [
+    splitLink({
+      condition: (op) => op.type === 'subscription',
+      true: httpSubscriptionLink({ url: '/trpc' }), // SSE for subscriptions
+      false: httpBatchLink({ url: '/trpc' }), // HTTP batch for queries/mutations
+    }),
+  ],
+})
+
+export const trpc = createTRPCOptionsProxy<TRPCRouter>({
+  client: trpcClient,
+  queryClient,
+})
+```
+
+### Usage in Components
+
+```tsx
+// Type-safe query
+const { data, isLoading, error } = useQuery(trpc.heartbeat.queryOptions())
+// data is boolean | undefined, fully typed
+
+// Type-safe mutation with onSuccess callback
+const dispatch = useMutation(
+  trpc.dispatch.mutationOptions({
+    onSuccess: (data) => {
+      // data.task is TaskData, fully typed
+      queryClient.invalidateQueries()
+    },
+  }),
+)
+dispatch.mutate({ task: 'LinkStart', params: 'optional' })
+
+// Type-safe SSE subscription
+const { data: { tasks = [] } = {} } = useSubscription(trpc.state.subscriptionOptions())
+// tasks is TaskData[], auto-updates via SSE
+```
 
 ### Package Management
 
@@ -229,26 +398,139 @@ Keep all changes type-safe and properly formatted to avoid hook failures.
 
 ## Client Architecture
 
-The React dashboard (`client/src/App.tsx`) uses:
+The React dashboard (`client/src/Dashboard.tsx`) uses:
 
-- **TanStack Query** for server state management (polling every 5s)
-- **Hono RPC client** for type-safe API calls: `hc<RouteType>(apiBase)`
-- **TailwindCSS 4** for styling
-- **React 19** with React Compiler enabled
+- **TanStack Query** for server state management with tRPC integration
+- **tRPC with SSE subscriptions** for real-time updates (no polling required)
+- **shadcn/ui components** for polished, accessible UI primitives
+- **@schedule-x/calendar** for interactive schedule visualization
+- **TailwindCSS 4** for styling with CSS variables and dark mode
+- **React 19** with React Compiler enabled for automatic optimizations
+- **Temporal API** for timezone-aware date/time handling
+- **Sonner** for toast notifications
 
-Key features:
+### Key Components
 
-- Real-time task/schedule list updates
-- Live screenshot viewer (refreshes every 5s)
-- Quick actions: Start, Stop, Lock, Unlock
-- Schedule management: Add/remove cron schedules
-- System status indicator (Online/Offline)
+#### Dashboard Layout (Grid-based Responsive)
 
-API base URL is `http://localhost:3113` in dev mode, `window.location.origin` in production.
+```tsx
+<main className="grid grid-cols-1 md:grid-cols-6 lg:grid-cols-12 gap-4">
+  {/* Screenshot - Large, aspect-video */}
+  <ScreenshotViewer className="md:col-span-6 lg:col-span-8 lg:row-span-2" />
 
-## Type Safety
+  {/* Quick Actions + Lock Toggle - Horizontal layout */}
+  <div className="md:col-span-4 lg:col-span-6">
+    <QuickActions />
+    <LockToggle />
+  </div>
 
-- Server exports `RouteType` for client-side RPC type inference
-- Client imports type from `@maam/server` (workspace dependency)
-- Schemas in `@maam/server/schema` can be imported by external consumers
-- Use `hc<RouteType>(url)` in any TypeScript consumer for full type safety
+  {/* Task Manager - List with accordion */}
+  <TaskManager className="col-span-full lg:col-span-6" />
+
+  {/* Log Viewer - Scrollable accordion */}
+  <LogViewer className="col-span-full lg:col-span-6" />
+
+  {/* Schedule Manager - Full-width calendar */}
+  <ScheduleManager className="col-span-full lg:col-span-6" />
+
+  {/* Task Statistics - Compact metrics */}
+  <TaskStatistics className="md:col-span-4 lg:col-span-6" />
+
+  {/* Config Viewer - Copy-to-clipboard URLs */}
+  <ConfigViewer className="col-span-full lg:col-span-6" />
+</main>
+```
+
+#### Connection State Management
+
+The dashboard tracks three connection states:
+
+1. **Server Connection**: `heartbeat.data === true` (tRPC heartbeat query)
+2. **Loading State**: `heartbeat.isPending` (initial connection attempt)
+3. **Error State**: `heartbeat.isError` (connection failed)
+
+Use these states to:
+
+- Disable features when disconnected (`connected={connected}` prop)
+- Show loading overlays during initial connection
+- Display error messages and retry options
+
+#### Real-time Updates via SSE Subscriptions
+
+```tsx
+// Task state subscription
+const { data: { tasks = [] } = {} } = useSubscription({
+  ...trpc.state.subscriptionOptions(),
+  enabled: connected, // Only subscribe when connected
+})
+
+// Device logs subscription
+const { data: logs = [] } = useSubscription(trpc.deviceLog.subscriptionOptions())
+```
+
+SSE subscriptions use `httpSubscriptionLink` and automatically:
+
+- Reconnect on disconnect
+- Handle keepalive pings every 2 seconds
+- Batch events when multiple occur rapidly
+
+#### shadcn/ui Component Usage
+
+All UI components are from shadcn/ui (Radix UI + Tailwind):
+
+- **Forms**: `<Form>`, `<Input>`, `<Select>`, `<Switch>`, `<Label>`, `<Field>`
+- **Layout**: `<Card>`, `<Separator>`, `<ScrollArea>`, `<Tabs>`
+- **Overlays**: `<Dialog>`, `<Popover>`, `<DropdownMenu>`
+- **Feedback**: `<Alert>`, `<Badge>`, `<Skeleton>`, `<Spinner>`, `Toaster` (Sonner)
+- **Interactive**: `<Button>`, `<Accordion>`, `<Toggle>`, `<Collapsible>`
+
+Components are configured in `client/components.json` with:
+
+- Style: `new-york` (modern, clean aesthetic)
+- Icon library: `lucide-react`
+- CSS variables: enabled for theming
+- Aliases: `@/components/ui`, `@/lib/utils`, `@/hooks`
+
+#### @schedule-x Calendar Integration
+
+The ScheduleManager component uses @schedule-x for visual scheduling:
+
+```tsx
+const calendar = useCalendarApp({
+  views: [createViewDay(), createViewWeek(), createViewList()],
+  theme: 'shadcn', // Custom theme matching UI
+  isDark: resolvedTheme === 'dark', // Sync with app theme
+  timezone: browserTz, // User's browser timezone
+  events: [...schedules, ...officialEvents, newDaySeparator],
+  callbacks: {
+    onEventClick: ({ id }) => setScheduleIdEdit(id),
+    onClickDateTime: (dt) => setDateTimeToAdd(dt),
+  },
+})
+```
+
+Calendar features:
+
+- **Daily/Weekly/List Views**: Switch between visualization modes
+- **Color-coded Events**: Different calendars for tasks, official events, separators
+- **Click Handlers**: Edit schedules on click, add on datetime click
+- **Recurring Events**: RRULE support for daily schedules
+- **Timezone-aware**: All datetimes use `Temporal.ZonedDateTime`
+
+#### Utility Functions
+
+```tsx
+// Format duration (auto-selects unit: day/hour/minute/second)
+formatDuration(task.duration) // "5s", "2m", "1.5h"
+
+// Format timestamp (locale-aware)
+formatTime(task.createdAt) // "10/26/25, 3:15 PM"
+
+// Format task type (Chinese display names)
+formatTaskType('LinkStart') // "启动链接"
+formatTaskType('LinkStart-Combat') // "启动链接-战斗"
+
+// Tailwind class merging
+cn('px-4', 'px-2') // "px-2" (latter wins)
+cn('px-4', className) // Safely merge with prop className
+```

@@ -32,7 +32,13 @@ const queryKey = trpc.schedule.get.queryKey()
 
 const browserTz = Temporal.Now.timeZoneId()
 
-export const ScheduleManager = ({ className }: { className?: string }) => {
+export const ScheduleManager = ({
+  className,
+  connected,
+}: {
+  className?: string
+  connected?: boolean
+}) => {
   const { resolvedTheme } = useTheme()
 
   const [datetimeToAdd, setDateTimeToAdd] = useState<Temporal.ZonedDateTime>()
@@ -189,6 +195,8 @@ export const ScheduleManager = ({ className }: { className?: string }) => {
             onClick={() => setDateTimeToAdd(Temporal.Now.zonedDateTimeISO())}
             size="icon"
             variant="secondary"
+            disabled={!connected}
+            title={connected ? 'Add Schedule' : 'Server connection required'}
           >
             <Plus />
           </Button>

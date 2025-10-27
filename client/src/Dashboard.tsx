@@ -63,12 +63,28 @@ import { cn, formatDuration, formatTaskType, formatTime } from './utils'
 export default function Dashboard() {
   const heartbeat = useQuery(trpc.heartbeat.queryOptions())
   const connected = heartbeat.data === true
+  const isInitialLoad = heartbeat.isPending && !heartbeat.data
 
   const { data: { tasks = [] } = {} } = useSubscription({
     ...trpc.state.subscriptionOptions(),
     enabled: connected,
   })
   const { data: isLocked = false } = useQuery(trpc.isLocked.queryOptions())
+
+  // Show fullscreen loading overlay during initial connection
+  if (isInitialLoad) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm">
+        <div className="flex flex-col items-center gap-4 text-center">
+          <Spinner className="size-12" />
+          <div className="space-y-2">
+            <h2 className="text-2xl font-semibold">Connecting to Server</h2>
+            <p className="text-muted-foreground">Please wait while we establish a connection...</p>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <>
@@ -80,7 +96,8 @@ export default function Dashboard() {
           refetch={heartbeat.refetch}
         />
       </Header>
-      <main className="flex-1 container mx-auto p-4 max-w-7xl grid grid-cols-1 md:grid-cols-6 lg:grid-cols-12 gap-4 auto-rows-auto">
+      <main className="flex-1 container mx-auto p-4 max-w-7xl grid grid-cols-1 md:grid-cols-6 lg:grid-cols-12 gap-4 auto-rows-min">
+        {/* Lock Warning - Full Width */}
         {isLocked && (
           <Alert className="col-span-full" variant="warning">
             <LockIcon />
@@ -89,19 +106,47 @@ export default function Dashboard() {
           </Alert>
         )}
 
-        <ScreenshotViewer className="md:col-span-6 lg:col-span-8 lg:row-span-2" />
+        {/* Connection Error Warning */}
+        {heartbeat.isError && (
+          <Alert className="col-span-full" variant="destructive">
+            <AlertTitle>Connection Lost</AlertTitle>
+            <AlertDescription>
+              Unable to connect to the server. Some features may be unavailable.{' '}
+              <Button variant="link" className="p-0 h-auto" onClick={() => heartbeat.refetch()}>
+                Retry
+              </Button>
+            </AlertDescription>
+          </Alert>
+        )}
 
-        {/* Quick Actions - Medium Box */}
-        <div className="md:col-span-4 lg:col-span-6 row-span-1 flex justify-between items-center">
+        {/* Screenshot - Left side on desktop, full width on mobile/tablet */}
+        <ScreenshotViewer
+          className="col-span-full md:col-span-full lg:col-span-8 lg:row-span-2"
+          connected={connected}
+        />
+
+        {/* Quick Actions - Top right on desktop, full width on smaller screens */}
+        <Card className="col-span-full md:col-span-3 lg:col-span-4 p-4 flex flex-col gap-3">
           <QuickActions locked={isLocked} connected={connected} />
           <LockToggle isLocked={isLocked} connected={connected} />
-        </div>
+        </Card>
 
+        {/* Task Statistics - Right side below Quick Actions */}
+        <Card className="col-span-full md:col-span-3 lg:col-span-4 p-0 md:p-0">
+          <TaskStatistics tasks={tasks} />
+        </Card>
+
+        {/* Task Manager - Left column on desktop */}
         <TaskManager tasks={tasks} className="col-span-full lg:col-span-6" />
+
+        {/* Log Viewer - Right column on desktop */}
         <LogViewer className="col-span-full lg:col-span-6" />
-        <ScheduleManager className="col-span-full lg:col-span-6" />
-        <TaskStatistics tasks={tasks} className="md:col-span-4 lg:col-span-6" />
-        <ConfigViewer className="col-span-full lg:col-span-6" />
+
+        {/* Schedule Manager - Full width (calendar needs horizontal space) */}
+        <ScheduleManager className="col-span-full" connected={connected} />
+
+        {/* Config Viewer - Full width */}
+        <ConfigViewer className="col-span-full" />
       </main>
       <Footer />
     </>
@@ -223,39 +268,42 @@ function QuickActions({ locked, connected }: { locked: boolean; connected: boole
     }),
   )
   return (
-    <ButtonGroup>
-      <Button
-        onClick={() => start.mutate()}
-        disabled={locked || !connected || start.isPending}
-        className="inline-flex items-center justify-center uppercase gap-2 px-4 py-3 font-medium transition-all duration-200 bg-blue-600 hover:bg-blue-700 text-white shadow-lg shadow-blue-500/30 hover:shadow-xl hover:shadow-blue-500/40 hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
-      >
-        <Play className="w-4 h-4" />
-        <span className="hidden sm:inline">{start.isPending ? 'Starting...' : 'Start'}</span>
-      </Button>
-      <Button
-        onClick={() => stop.mutate()}
-        disabled={!connected || stop.isPending}
-        className="inline-flex items-center justify-center uppercase gap-2 px-4 py-3 font-medium transition-all duration-200 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
-      >
-        <Square className="w-4 h-4" />
-        <span className="hidden sm:inline">{stop.isPending ? 'Stopping...' : 'Stop'}</span>
-      </Button>
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild disabled={!connected}>
-          <Button className="inline-flex items-center justify-center uppercase gap-2 px-4 py-3 font-medium transition-all duration-200 bg-linear-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white shadow-lg shadow-purple-500/30 hover:shadow-xl hover:shadow-purple-500/40 hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100">
-            <Plus className="w-4 h-4" />
-            <span className="hidden sm:inline">Task</span>
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent>
-          {TASK_TYPE.map((task) => (
-            <DropdownMenuItem key={task} onSelect={() => dispatch.mutate({ task })}>
-              {formatTaskType(task)}
-            </DropdownMenuItem>
-          ))}
-        </DropdownMenuContent>
-      </DropdownMenu>
-    </ButtonGroup>
+    <div className="flex flex-col gap-2 w-full">
+      <h3 className="text-sm font-semibold text-muted-foreground">Quick Actions</h3>
+      <ButtonGroup className="w-full">
+        <Button
+          onClick={() => start.mutate()}
+          disabled={locked || !connected || start.isPending}
+          className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-3 font-medium transition-all duration-200 bg-blue-600 hover:bg-blue-700 text-white shadow-lg shadow-blue-500/30 hover:shadow-xl hover:shadow-blue-500/40 hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
+        >
+          <Play className="w-4 h-4" />
+          <span>{start.isPending ? 'Starting...' : 'Start'}</span>
+        </Button>
+        <Button
+          onClick={() => stop.mutate()}
+          disabled={!connected || stop.isPending}
+          className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-3 font-medium transition-all duration-200 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          <Square className="w-4 h-4" />
+          <span>{stop.isPending ? 'Stopping...' : 'Stop'}</span>
+        </Button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild disabled={!connected}>
+            <Button className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-3 font-medium transition-all duration-200 bg-linear-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white shadow-lg shadow-purple-500/30 hover:shadow-xl hover:shadow-purple-500/40 hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100">
+              <Plus className="w-4 h-4" />
+              <span>Task</span>
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent>
+            {TASK_TYPE.map((task) => (
+              <DropdownMenuItem key={task} onSelect={() => dispatch.mutate({ task })}>
+                {formatTaskType(task)}
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </ButtonGroup>
+    </div>
   )
 }
 
@@ -274,30 +322,35 @@ function TaskStatistics({ tasks, className }: { tasks: TaskData[]; className?: s
       : 0
 
   return (
-    <Card className={cn('grid grid-cols-4 gap-4', className)}>
-      <CardContent className="p-0 text-center">
-        <div className="text-lg font-bold text-green-500">{successCount}</div>
-        <div className="text-xs text-muted-foreground">Success</div>
-      </CardContent>
-      <CardContent className="p-0 text-center">
-        <div className="text-lg font-bold text-red-500">{failedCount}</div>
-        <div className="text-xs text-muted-foreground">Failed</div>
-      </CardContent>
-      <CardContent className="p-0 text-center">
-        <div className="text-lg font-bold text-sky-500">{successRate}%</div>
-        <div className="text-xs text-muted-foreground">Completed</div>
-      </CardContent>
-      <CardContent className="p-0 text-center">
-        <div className="text-lg font-bold text-yellow-500">
-          {avgDuration > 0 ? formatDuration(avgDuration) : '-'}
+    <Card className={cn('flex flex-col h-full', className)}>
+      <CardHeader className="pb-3">
+        <CardTitle className="text-sm font-medium text-muted-foreground">Task Statistics</CardTitle>
+      </CardHeader>
+      <CardContent className="flex-1 grid grid-cols-2 gap-4 p-4 pt-0">
+        <div className="text-center">
+          <div className="text-2xl font-bold text-green-500">{successCount}</div>
+          <div className="text-xs text-muted-foreground">Success</div>
         </div>
-        <div className="text-xs text-muted-foreground">Duration</div>
+        <div className="text-center">
+          <div className="text-2xl font-bold text-red-500">{failedCount}</div>
+          <div className="text-xs text-muted-foreground">Failed</div>
+        </div>
+        <div className="text-center">
+          <div className="text-2xl font-bold text-sky-500">{successRate}%</div>
+          <div className="text-xs text-muted-foreground">Completed</div>
+        </div>
+        <div className="text-center">
+          <div className="text-2xl font-bold text-yellow-500">
+            {avgDuration > 0 ? formatDuration(avgDuration) : '-'}
+          </div>
+          <div className="text-xs text-muted-foreground">Avg Duration</div>
+        </div>
       </CardContent>
     </Card>
   )
 }
 
-function ScreenshotViewer({ className }: { className?: string }) {
+function ScreenshotViewer({ className, connected }: { className?: string; connected?: boolean }) {
   const { data, isLoading } = useQuery(trpc.screenshotQuery.queryOptions())
   return (
     <Card
@@ -307,6 +360,15 @@ function ScreenshotViewer({ className }: { className?: string }) {
         <Skeleton className="w-full h-full grid place-items-center">
           <Spinner className="size-4" />
         </Skeleton>
+      ) : !connected ? (
+        <Empty>
+          <EmptyHeader>
+            <EmptyTitle>Connection Required</EmptyTitle>
+          </EmptyHeader>
+          <EmptyDescription>
+            Screenshot unavailable. Please check your connection to the server.
+          </EmptyDescription>
+        </Empty>
       ) : data ? (
         <img
           src={`data:image/png;base64,${data}`}
@@ -468,15 +530,31 @@ function LockToggle({
   )
 
   return (
-    <Button
-      onClick={() => mutate(!isLocked)}
-      className={cn(className)}
-      disabled={!connected || isPending}
-      variant={isLocked ? 'default' : 'destructive'}
-    >
-      {isPending ? <Spinner /> : isLocked ? <LockIcon className="size-3" /> : <UnlockIcon />}
-      {isPending ? (variables ? 'Locking...' : 'Unlocking...') : isLocked ? 'Unlock' : 'Lock'}
-    </Button>
+    <div className={cn('flex flex-col gap-2', className)}>
+      <h3 className="text-sm font-semibold text-muted-foreground">Manager Control</h3>
+      <Button
+        onClick={() => mutate(!isLocked)}
+        className="w-full"
+        disabled={!connected || isPending}
+        variant={isLocked ? 'default' : 'destructive'}
+        size="lg"
+      >
+        {isPending ? (
+          <Spinner />
+        ) : isLocked ? (
+          <LockIcon className="size-4 mr-2" />
+        ) : (
+          <UnlockIcon className="size-4 mr-2" />
+        )}
+        {isPending
+          ? variables
+            ? 'Locking...'
+            : 'Unlocking...'
+          : isLocked
+            ? 'Unlock Manager'
+            : 'Lock Manager'}
+      </Button>
+    </div>
   )
 }
 
