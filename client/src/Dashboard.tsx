@@ -323,7 +323,7 @@ function ScreenshotViewer({ className, connected }: { className?: string; connec
       className={cn('aspect-video overflow-hidden flex flex-col py-0', className)}
     >
       {/* Progress bar at top - only show after first estimate */}
-      {hasEstimate && (
+      {hasEstimate && intervalData?.intervalMs && (
         <div className="px-4 pt-4 pb-2 space-y-2">
           <div className="flex items-center justify-between text-xs text-muted-foreground">
             <span>
@@ -331,7 +331,7 @@ function ScreenshotViewer({ className, connected }: { className?: string; connec
               {!isHighConfidence && ' (estimating...)'}
             </span>
             <span>
-              Interval: ~{Math.round(intervalData.intervalMs! / 1000)}s
+              Interval: ~{Math.round(intervalData.intervalMs / 1000)}s
             </span>
           </div>
           <Progress value={progress} className="h-1" />

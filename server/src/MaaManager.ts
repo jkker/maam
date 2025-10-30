@@ -536,9 +536,9 @@ export class MaaManager extends EventEmitter<MaaManagerEventMap> {
   private recordScreenshotTimestamp(timestamp: number) {
     this.screenshotTimestamps.push(timestamp)
     
-    // Keep only recent history
+    // Keep only recent history - use slice for better clarity
     if (this.screenshotTimestamps.length > this.MAX_TIMESTAMP_HISTORY) {
-      this.screenshotTimestamps.shift()
+      this.screenshotTimestamps = this.screenshotTimestamps.slice(-this.MAX_TIMESTAMP_HISTORY)
     }
     
     // Calculate estimated interval if we have at least 2 timestamps
