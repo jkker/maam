@@ -163,3 +163,87 @@ describe('HTTP Unlock Endpoint', () => {
     fixture.stopPolling()
   })
 })
+
+describe('tRPC unlock vs HTTP unlock', () => {
+  const testDbPath = `/tmp/test-maam-trpc-unlock-${Date.now()}.db`
+  let fixture: MaaDeviceFixture
+
+  beforeEach(() => {
+    // Set test database path
+    process.env.DATABASE_PATH = testDbPath
+
+    // Remove existing test database
+    try {
+      if (fs.existsSync(testDbPath)) fs.unlinkSync(testDbPath)
+      if (fs.existsSync(testDbPath + '-shm')) fs.unlinkSync(testDbPath + '-shm')
+      if (fs.existsSync(testDbPath + '-wal')) fs.unlinkSync(testDbPath + '-wal')
+    } catch (e) {
+      // Ignore errors
+    }
+
+    // Initialize database
+    initDatabase()
+
+    // Create fixture for the global manager
+    fixture = new MaaDeviceFixture(manager)
+  })
+
+  afterEach(() => {
+    // Cleanup
+    fixture.cleanup()
+
+    // Close database connection
+    try {
+      closeDatabase()
+    } catch (e) {
+      // Ignore errors
+    }
+
+    // Remove test database
+    try {
+      if (fs.existsSync(testDbPath)) fs.unlinkSync(testDbPath)
+      if (fs.existsSync(testDbPath + '-shm')) fs.unlinkSync(testDbPath + '-shm')
+      if (fs.existsSync(testDbPath + '-wal')) fs.unlinkSync(testDbPath + '-wal')
+    } catch (e) {
+      // Ignore errors
+    }
+  })
+
+  it('should unlock immediately when using manager.unlock() directly (tRPC behavior)', async () => {
+    fixture.startPolling()
+
+    // Lock the manager
+    await manager.lock()
+    expect(manager.locked).toBe(true)
+
+    // Call unlock directly (this is what tRPC does)
+    await manager.unlock()
+
+    // Should be unlocked immediately, not scheduled
+    expect(manager.locked).toBe(false)
+
+    fixture.stopPolling()
+  })
+
+  it('should schedule delayed unlock when using scheduleUnlock() (HTTP endpoint behavior)', async () => {
+    fixture.startPolling()
+
+    // Lock the manager
+    await manager.lock()
+    expect(manager.locked).toBe(true)
+
+    // Schedule unlock with 2 second delay (this is what HTTP endpoint does)
+    manager.scheduleUnlock({ seconds: 2 })
+
+    // Should still be locked immediately after scheduling
+    expect(manager.locked).toBe(true)
+
+    // Wait for unlock to execute
+    await new Promise((resolve) => setTimeout(resolve, 2200))
+
+    // Now should be unlocked
+    expect(manager.locked).toBe(false)
+
+    fixture.stopPolling()
+  })
+})
