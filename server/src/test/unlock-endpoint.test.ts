@@ -6,49 +6,47 @@ import { manager } from '../index'
 import { MaaDeviceFixture } from './fixture'
 import { initDatabase, closeDatabase } from '../lib/db'
 
+// Helper function to clean up database files
+function cleanupTestDatabase(dbPath: string) {
+  const files = [dbPath, `${dbPath}-shm`, `${dbPath}-wal`]
+  files.forEach((file) => {
+    try {
+      if (fs.existsSync(file)) fs.unlinkSync(file)
+    } catch (e) {
+      // Ignore errors
+    }
+  })
+}
+
+// Helper function to setup test environment
+function setupTestEnvironment(dbPath: string): MaaDeviceFixture {
+  process.env.DATABASE_PATH = dbPath
+  cleanupTestDatabase(dbPath)
+  initDatabase()
+  return new MaaDeviceFixture(manager)
+}
+
+// Helper function to cleanup test environment
+function cleanupTestEnvironment(fixture: MaaDeviceFixture, dbPath: string) {
+  fixture.cleanup()
+  try {
+    closeDatabase()
+  } catch (e) {
+    // Ignore errors
+  }
+  cleanupTestDatabase(dbPath)
+}
+
 describe('HTTP Unlock Endpoint', () => {
   const testDbPath = `/tmp/test-maam-unlock-${Date.now()}.db`
   let fixture: MaaDeviceFixture
 
   beforeEach(() => {
-    // Set test database path
-    process.env.DATABASE_PATH = testDbPath
-
-    // Remove existing test database
-    try {
-      if (fs.existsSync(testDbPath)) fs.unlinkSync(testDbPath)
-      if (fs.existsSync(testDbPath + '-shm')) fs.unlinkSync(testDbPath + '-shm')
-      if (fs.existsSync(testDbPath + '-wal')) fs.unlinkSync(testDbPath + '-wal')
-    } catch (e) {
-      // Ignore errors
-    }
-
-    // Initialize database
-    initDatabase()
-
-    // Create fixture for the global manager
-    fixture = new MaaDeviceFixture(manager)
+    fixture = setupTestEnvironment(testDbPath)
   })
 
   afterEach(() => {
-    // Cleanup
-    fixture.cleanup()
-
-    // Close database connection
-    try {
-      closeDatabase()
-    } catch (e) {
-      // Ignore errors
-    }
-
-    // Remove test database
-    try {
-      if (fs.existsSync(testDbPath)) fs.unlinkSync(testDbPath)
-      if (fs.existsSync(testDbPath + '-shm')) fs.unlinkSync(testDbPath + '-shm')
-      if (fs.existsSync(testDbPath + '-wal')) fs.unlinkSync(testDbPath + '-wal')
-    } catch (e) {
-      // Ignore errors
-    }
+    cleanupTestEnvironment(fixture, testDbPath)
   })
 
   it('should schedule delayed unlock with default 10 minute delay', async () => {
@@ -169,44 +167,11 @@ describe('tRPC unlock vs HTTP unlock', () => {
   let fixture: MaaDeviceFixture
 
   beforeEach(() => {
-    // Set test database path
-    process.env.DATABASE_PATH = testDbPath
-
-    // Remove existing test database
-    try {
-      if (fs.existsSync(testDbPath)) fs.unlinkSync(testDbPath)
-      if (fs.existsSync(testDbPath + '-shm')) fs.unlinkSync(testDbPath + '-shm')
-      if (fs.existsSync(testDbPath + '-wal')) fs.unlinkSync(testDbPath + '-wal')
-    } catch (e) {
-      // Ignore errors
-    }
-
-    // Initialize database
-    initDatabase()
-
-    // Create fixture for the global manager
-    fixture = new MaaDeviceFixture(manager)
+    fixture = setupTestEnvironment(testDbPath)
   })
 
   afterEach(() => {
-    // Cleanup
-    fixture.cleanup()
-
-    // Close database connection
-    try {
-      closeDatabase()
-    } catch (e) {
-      // Ignore errors
-    }
-
-    // Remove test database
-    try {
-      if (fs.existsSync(testDbPath)) fs.unlinkSync(testDbPath)
-      if (fs.existsSync(testDbPath + '-shm')) fs.unlinkSync(testDbPath + '-shm')
-      if (fs.existsSync(testDbPath + '-wal')) fs.unlinkSync(testDbPath + '-wal')
-    } catch (e) {
-      // Ignore errors
-    }
+    cleanupTestEnvironment(fixture, testDbPath)
   })
 
   it('should unlock immediately when using manager.unlock() directly (tRPC behavior)', async () => {
@@ -233,13 +198,16 @@ describe('tRPC unlock vs HTTP unlock', () => {
     expect(manager.locked).toBe(true)
 
     // Schedule unlock with 2 second delay (this is what HTTP endpoint does)
-    manager.scheduleUnlock({ seconds: 2 })
+    const delaySeconds = 2
+    const executionBufferMs = 200 // Buffer for execution time
+    manager.scheduleUnlock({ seconds: delaySeconds })
 
     // Should still be locked immediately after scheduling
     expect(manager.locked).toBe(true)
 
-    // Wait for unlock to execute
-    await new Promise((resolve) => setTimeout(resolve, 2200))
+    // Wait for unlock to execute with buffer
+    const waitTimeMs = delaySeconds * 1000 + executionBufferMs
+    await new Promise((resolve) => setTimeout(resolve, waitTimeMs))
 
     // Now should be unlocked
     expect(manager.locked).toBe(false)
