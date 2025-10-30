@@ -14,6 +14,7 @@ import {
 } from './lib/schema'
 
 import { getNow } from './lib/temporal'
+import { dbService } from './lib/db/service'
 
 /**
  * Runtime representation of a Maa task, including life-cycle state transitions.
@@ -275,6 +276,47 @@ export class MaaManager extends EventEmitter<MaaManagerEventMap> {
         this.stopScreenshotPolling()
       }
     })
+    
+    // Initialize manager state in database
+    this.initializeDatabase()
+  }
+  
+  /**
+   * Initialize database and restore state from database
+   */
+  private async initializeDatabase() {
+    try {
+      // Save or update manager state
+      await dbService.saveManagerState(this.device, this.user, this.tz, this.locked)
+      
+      // Restore schedules from database
+      const savedSchedules = await dbService.getSchedulesByDevice(this.device)
+      for (const schedule of savedSchedules) {
+        // Re-create schedule without re-saving to database
+        const job = new TaskSchedule(
+          schedule.type as TaskType,
+          schedule.hour,
+          schedule.minute,
+          schedule.timezone || this.tz,
+          () => this.create(schedule.type as TaskType, schedule.params || undefined)
+        )
+        
+        // Restore execution metadata
+        if (schedule.lastRunTime) {
+          job.lastRunTime = Temporal.ZonedDateTime.from(schedule.lastRunTime)
+        }
+        if (schedule.runCount) {
+          job.runCount = schedule.runCount
+        }
+        
+        this.scheduler.addCronJob(job)
+        logger.info(`Restored schedule ${job.id} from database`)
+      }
+      
+      logger.info(`Manager ${this.device} initialized from database`)
+    } catch (error) {
+      logger.error(`Failed to initialize manager from database:`, error)
+    }
   }
 
   emit<K>(
@@ -304,6 +346,14 @@ export class MaaManager extends EventEmitter<MaaManagerEventMap> {
     this.queue.push(task)
 
     task.log()
+    
+    // Persist to database (async, non-blocking)
+    if (!task.immediate) {
+      dbService.saveTask(task.data, this.device).catch((error) => {
+        logger.error(`Failed to persist task ${task.id} to database:`, error)
+      })
+    }
+    
     return task
   }
 
@@ -315,6 +365,12 @@ export class MaaManager extends EventEmitter<MaaManagerEventMap> {
   addSchedule({ task, hour, minute = 0, params, timezone = this.tz }: Schedule) {
     const job = new TaskSchedule(task, hour, minute, timezone, () => this.create(task, params))
     this.scheduler.addCronJob(job)
+    
+    // Persist schedule to database (async, non-blocking)
+    dbService.saveSchedule(job.data, this.device).catch((error) => {
+      logger.error(`Failed to persist schedule ${job.id} to database:`, error)
+    })
+    
     return job.data
   }
   /**
@@ -322,7 +378,16 @@ export class MaaManager extends EventEmitter<MaaManagerEventMap> {
    * @param id - Cron job identifier returned from MaaManager.addSchedule
    */
   removeSchedule(id: string) {
-    return (this.scheduler.removeById(id) as TaskSchedule | undefined)?.data
+    const scheduleData = (this.scheduler.removeById(id) as TaskSchedule | undefined)?.data
+    
+    // Remove from database (async, non-blocking)
+    if (scheduleData) {
+      dbService.deleteSchedule(id).catch((error) => {
+        logger.error(`Failed to delete schedule ${id} from database:`, error)
+      })
+    }
+    
+    return scheduleData
   }
 
   get schedules() {
@@ -345,6 +410,11 @@ export class MaaManager extends EventEmitter<MaaManagerEventMap> {
    */
   public async lock(): Promise<LockResult> {
     this.locked = true
+    
+    // Persist lock state to database (async, non-blocking)
+    dbService.updateManagerLockState(this.device, true).catch((error) => {
+      logger.error(`Failed to update lock state in database:`, error)
+    })
 
     // Pause all schedules
     this.scheduler.stop()
@@ -409,6 +479,11 @@ export class MaaManager extends EventEmitter<MaaManagerEventMap> {
     this.unlockTime = getNow()
     const { schedules } = this
     logger.info(`Manager unlocked. Resumed ${schedules.length} schedules.`)
+    
+    // Persist unlock state to database (async, non-blocking)
+    dbService.updateManagerLockState(this.device, false).catch((error) => {
+      logger.error(`Failed to update unlock state in database:`, error)
+    })
 
     // Calculate next scheduled task
     const cooldownEnd = this.unlockTime.add(cooldown)
@@ -491,6 +566,13 @@ export class MaaManager extends EventEmitter<MaaManagerEventMap> {
       .join('\n')
     this.logs.push(text)
     logger.info(`Received MAA Log:\n`, text)
+    
+    // Persist device log to database (async, non-blocking)
+    const timestamp = getNow().toString()
+    dbService.saveDeviceLog(this.device, timestamp, 'Device Log', text).catch((error) => {
+      logger.error(`Failed to save device log to database:`, error)
+    })
+    
     this.emit('deviceLog', this.logs)
   }
 
@@ -511,6 +593,14 @@ export class MaaManager extends EventEmitter<MaaManagerEventMap> {
     this.emit('taskCompleted', task.data)
     task.emit('DONE', task)
     task.log()
+    
+    // Persist task completion to database (async, non-blocking)
+    if (!task.immediate) {
+      dbService.updateTask(task.data, this.device).catch((error) => {
+        logger.error(`Failed to update task ${task.id} in database:`, error)
+      })
+    }
+    
     return task
   }
 
@@ -520,6 +610,14 @@ export class MaaManager extends EventEmitter<MaaManagerEventMap> {
       task.startedAt = getNow()
       task.emit('RUNNING', task)
       task.log()
+      
+      // Persist task state update to database (async, non-blocking)
+      if (!task.immediate) {
+        dbService.updateTask(task.data, this.device).catch((error) => {
+          logger.error(`Failed to update task ${task.id} in database:`, error)
+        })
+      }
+      
       const { id, type, params } = task
       return { id, type, ...(params && { params }) }
     })
