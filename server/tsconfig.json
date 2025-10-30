@@ -9,7 +9,7 @@
     "module": "ESNext",
     /* Bundler mode */
     "moduleResolution": "bundler",
-    "types": ["vite/client", "vitest/importMeta", "node", "temporal-polyfill/global"],
+    "types": ["vite/client", "vitest/importMeta", "vitest/globals", "node", "temporal-polyfill/global"],
     /* Linting */
     "strict": true,
     "noFallthroughCasesInSwitch": true,
@@ -20,5 +20,5 @@
     "composite": true,
     "noEmit": true
   },
-  "include": ["src"]
+  "include": ["src", "test"]
 }

@@ -13,7 +13,7 @@ describe('Database Service', () => {
   beforeEach(() => {
     // Set test database path
     process.env.DATABASE_PATH = testDbPath
-    
+
     // Remove existing test database
     try {
       if (fs.existsSync(testDbPath)) fs.unlinkSync(testDbPath)
@@ -22,7 +22,7 @@ describe('Database Service', () => {
     } catch (e) {
       // Ignore errors
     }
-    
+
     // Initialize fresh database
     initDatabase()
   })
@@ -34,7 +34,7 @@ describe('Database Service', () => {
     } catch (e) {
       // Ignore errors
     }
-    
+
     // Cleanup test database
     try {
       if (fs.existsSync(testDbPath)) fs.unlinkSync(testDbPath)
@@ -201,7 +201,7 @@ describe('Database Service', () => {
 
     it('should update manager heartbeat', async () => {
       await dbService.saveManagerState(testDevice, testUser, 'Asia/Shanghai', false)
-      
+
       const beforeHeartbeat = await dbService.getManagerState(testDevice)
       // After initial save, last_heartbeat might be set
       const initialHeartbeat = beforeHeartbeat?.lastHeartbeat

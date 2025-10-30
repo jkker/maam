@@ -1,5 +1,4 @@
-import type { TaskType } from '@maam/server'
-
+import { T, type TaskType } from '@maam/server/schema'
 import { clsx, type ClassValue } from 'clsx'
 import { twMerge } from 'tailwind-merge'
 
@@ -8,5 +7,5 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 export const formatTaskType = (type: TaskType) => {
-  return type.replace('LinkStart-', '')
+  return T[type] || type
 }

@@ -12,6 +12,7 @@ import {
   Play,
   Plus,
   Search,
+  Settings2,
   SettingsIcon,
   Square,
   Terminal,
@@ -20,6 +21,9 @@ import {
 
 import React, { useState } from 'react'
 import { toast } from 'sonner'
+import { Temporal } from 'temporal-polyfill'
+
+import { Autocomplete } from '@/components/ui/autocomplete'
 
 import {
   DropdownMenu,
@@ -35,6 +39,8 @@ import {
   InputGroupInput,
   InputGroupText,
 } from '@/components/ui/input-group'
+
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 
 import { ScheduleManager } from './components/ScheduleManager'
 import { TaskStatusBadge } from './components/task-status-badge'
@@ -60,31 +66,46 @@ import { Footer, Header } from './Layout'
 import { queryClient, trpc } from './lib/trpc'
 import { cn, formatDuration, formatTaskType, formatTime } from './utils'
 
+// Stage selection data with availability by weekday
+interface StageOption {
+  id: string
+  label: string
+  weekdays?: number[] // 1=Monday, 7=Sunday; empty means all days
+}
+
+const STAGE_OPTIONS: StageOption[] = [
+  { id: 'default', label: '当前/上次' },
+  // 主线关卡
+  { id: '1-7', label: '固源岩' },
+  { id: 'R8-11', label: '晶体元件' },
+  { id: '12-17-HARD', label: '化合切削液' },
+  // 资源本
+  { id: 'CE-6', label: '龙门币', weekdays: [2, 4, 6, 7] },
+  { id: 'AP-5', label: '红票', weekdays: [1, 4, 6, 7] },
+  { id: 'CA-5', label: '技能', weekdays: [2, 3, 5, 7] },
+  { id: 'LS-6', label: '经验' },
+  { id: 'SK-5', label: '碳', weekdays: [1, 3, 5, 6] },
+  // 剿灭模式
+  { id: 'Annihilation', label: '剿灭模式' },
+  // 芯片本
+  { id: 'PR-A-1', label: '奶/盾芯片', weekdays: [1, 4, 5, 7] },
+  { id: 'PR-A-2', label: '奶/盾芯片组', weekdays: [1, 4, 5, 7] },
+  { id: 'PR-B-1', label: '术/狙芯片', weekdays: [1, 2, 5, 6] },
+  { id: 'PR-B-2', label: '术/狙芯片组', weekdays: [1, 2, 5, 6] },
+  { id: 'PR-C-1', label: '先/辅芯片', weekdays: [3, 4, 6, 7] },
+  { id: 'PR-C-2', label: '先/辅芯片组', weekdays: [3, 4, 6, 7] },
+  { id: 'PR-D-1', label: '近/特芯片', weekdays: [2, 3, 6, 7] },
+  { id: 'PR-D-2', label: '近/特芯片组', weekdays: [2, 3, 6, 7] },
+]
+
 export default function Dashboard() {
   const heartbeat = useQuery(trpc.heartbeat.queryOptions())
-  const connected = heartbeat.data === true
-  const isInitialLoad = heartbeat.isPending && !heartbeat.data
+  const deviceConnected = heartbeat.data === true
 
   const { data: { tasks = [] } = {} } = useSubscription({
     ...trpc.state.subscriptionOptions(),
-    enabled: connected,
   })
   const { data: isLocked = false } = useQuery(trpc.isLocked.queryOptions())
-
-  // Show fullscreen loading overlay during initial connection
-  if (isInitialLoad) {
-    return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm">
-        <div className="flex flex-col items-center gap-4 text-center">
-          <Spinner className="size-12" />
-          <div className="space-y-2">
-            <h2 className="text-2xl font-semibold">Connecting to Server</h2>
-            <p className="text-muted-foreground">Please wait while we establish a connection...</p>
-          </div>
-        </div>
-      </div>
-    )
-  }
 
   return (
     <>
@@ -106,12 +127,12 @@ export default function Dashboard() {
           </Alert>
         )}
 
-        {/* Connection Error Warning */}
-        {heartbeat.isError && (
+        {/* Device Connection Warning */}
+        {!deviceConnected && !heartbeat.isPending && (
           <Alert className="col-span-full" variant="destructive">
-            <AlertTitle>Connection Lost</AlertTitle>
+            <AlertTitle>Device Offline</AlertTitle>
             <AlertDescription>
-              Unable to connect to the server. Some features may be unavailable.{' '}
+              MAA device is not responding to heartbeat. Some features may be unavailable.{' '}
               <Button variant="link" className="p-0 h-auto" onClick={() => heartbeat.refetch()}>
                 Retry
               </Button>
@@ -120,12 +141,12 @@ export default function Dashboard() {
         )}
 
         {/* Screenshot - Left side on desktop, full width on mobile/tablet */}
-        <ScreenshotViewer className="col-span-full" connected={connected} />
+        <ScreenshotViewer className="col-span-full" connected={deviceConnected} />
 
         {/* Quick Actions - Top right on desktop, full width on smaller screens */}
         <div className="col-span-full gap-4 grid grid-cols-1 md:grid-cols-2">
-          <QuickActions locked={isLocked} connected={connected} />
-          <LockToggle isLocked={isLocked} connected={connected} />
+          <QuickActions locked={isLocked} connected={deviceConnected} />
+          <LockToggle isLocked={isLocked} connected={deviceConnected} />
         </div>
 
         {/* Task Manager - Left column on desktop */}
@@ -135,7 +156,7 @@ export default function Dashboard() {
         <LogViewer className="col-span-full lg:col-span-6" />
 
         {/* Schedule Manager - Full width (calendar needs horizontal space) */}
-        <ScheduleManager className="col-span-full" connected={connected} />
+        <ScheduleManager className="col-span-full" connected={deviceConnected} />
 
         {/* Config Viewer - Full width */}
         <ConfigViewer className="col-span-full" />
@@ -240,8 +261,12 @@ function ConfigViewer({
   )
 }
 
+const { dayOfWeek } = Temporal.Now.zonedDateTimeISO('Asia/Shanghai')
+
 function QuickActions({ locked, connected }: { locked: boolean; connected: boolean }) {
   const queryClient = useQueryClient()
+  const [stagePopoverOpen, setStagePopoverOpen] = useState(false)
+  const [selectedStage, setSelectedStage] = useState<string | null>(null)
 
   const start = useMutation(
     trpc.start.mutationOptions({
@@ -254,80 +279,163 @@ function QuickActions({ locked, connected }: { locked: boolean; connected: boole
       onSuccess: () => queryClient.invalidateQueries(),
     }),
   )
+
   const dispatch = useMutation(
     trpc.dispatch.mutationOptions({
-      onSuccess: () => queryClient.invalidateQueries(),
+      onSuccess: () => {
+        void queryClient.invalidateQueries()
+        setStagePopoverOpen(false)
+        setSelectedStage(null)
+      },
     }),
   )
+
+  const handleStageDispatch = () => {
+    dispatch.mutate({ task: 'Settings-Stage1', params: selectedStage || undefined })
+  }
+
   return (
-    <ButtonGroup className="w-full">
-      <Button
-        onClick={() => start.mutate()}
-        disabled={locked || !connected || start.isPending}
-        className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-3 font-medium transition-all duration-200 bg-blue-600 hover:bg-blue-700 text-white shadow-lg shadow-blue-500/30 hover:shadow-xl hover:shadow-blue-500/40 hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
-      >
-        <Play className="w-4 h-4" />
-        <span>{start.isPending ? 'Starting...' : 'Start'}</span>
-      </Button>
-      <Button
-        onClick={() => stop.mutate()}
-        disabled={!connected || stop.isPending}
-        className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-3 font-medium transition-all duration-200 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
-      >
-        <Square className="w-4 h-4" />
-        <span>{stop.isPending ? 'Stopping...' : 'Stop'}</span>
-      </Button>
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild disabled={!connected}>
-          <Button className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-3 font-medium transition-all duration-200 bg-linear-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white shadow-lg shadow-purple-500/30 hover:shadow-xl hover:shadow-purple-500/40 hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100">
-            <Plus className="w-4 h-4" />
-            <span>Task</span>
+    <div className="flex gap-2">
+      <ButtonGroup className="flex-1">
+        <Button
+          onClick={() => start.mutate()}
+          disabled={locked || !connected || start.isPending}
+          className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-3 font-medium transition-all duration-200 bg-blue-600 hover:bg-blue-700 text-white shadow-lg shadow-blue-500/30 hover:shadow-xl hover:shadow-blue-500/40 hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
+        >
+          <Play className="w-4 h-4" />
+          <span>{start.isPending ? 'Starting...' : 'Start'}</span>
+        </Button>
+        <Button
+          onClick={() => stop.mutate()}
+          disabled={!connected || stop.isPending}
+          className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-3 font-medium transition-all duration-200 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          <Square className="w-4 h-4" />
+          <span>{stop.isPending ? 'Stopping...' : 'Stop'}</span>
+        </Button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild disabled={!connected}>
+            <Button className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-3 font-medium transition-all duration-200 bg-linear-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white shadow-lg shadow-purple-500/30 hover:shadow-xl hover:shadow-purple-500/40 hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100">
+              <Plus className="w-4 h-4" />
+              <span>Task</span>
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent>
+            {TASK_TYPE.map((task) => (
+              <DropdownMenuItem key={task} onSelect={() => dispatch.mutate({ task })}>
+                {formatTaskType(task)}
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </ButtonGroup>
+      {/* Stage Selection Popover */}
+      <Popover open={stagePopoverOpen} onOpenChange={setStagePopoverOpen}>
+        <PopoverTrigger asChild>
+          <Button
+            disabled={!connected || locked}
+            variant="outline"
+            size="lg"
+            className="px-3"
+            title="Select stage to fight"
+          >
+            <Settings2 className="w-4 h-4" />
           </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent>
-          {TASK_TYPE.map((task) => (
-            <DropdownMenuItem key={task} onSelect={() => dispatch.mutate({ task })}>
-              {formatTaskType(task)}
-            </DropdownMenuItem>
-          ))}
-        </DropdownMenuContent>
-      </DropdownMenu>
-    </ButtonGroup>
+        </PopoverTrigger>
+        <PopoverContent className="w-80 space-y-4">
+          <Autocomplete
+            options={STAGE_OPTIONS.map(({ id, label, weekdays }) => {
+              const text = `${id} - ${label}`
+              if (!weekdays?.length) return { value: id, label: text }
+              return {
+                value: id,
+                label: (
+                  <div className="flex items-center justify-between gap-2">
+                    {text}
+                    {
+                      <ul className="ml-auto inline-flex text-muted-foreground">
+                        {weekdays.map((d) => {
+                          const t = ['一', '二', '三', '四', '五', '六', '日'][d - 1]
+                          if (d === dayOfWeek) {
+                            return (
+                              <span key={d} className="font-bold">
+                                {t}
+                              </span>
+                            )
+                          }
+                          return <span key={d}>{t}</span>
+                        })}
+                      </ul>
+                    }
+                  </div>
+                ),
+                disabled: weekdays && !weekdays.includes(dayOfWeek),
+              }
+            })}
+            value={selectedStage}
+            onChange={setSelectedStage}
+            placeholder="Search stages..."
+            emptyMessage="No stages available today."
+            allowArbitrary={true}
+          />
+          <div className="flex gap-2">
+            <Button
+              onClick={handleStageDispatch}
+              disabled={!selectedStage || dispatch.isPending}
+              className="flex-1"
+            >
+              {dispatch.isPending ? 'Selecting...' : 'Select'}
+            </Button>
+            <Button onClick={() => setStagePopoverOpen(false)} variant="outline" className="flex-1">
+              Cancel
+            </Button>
+          </div>
+        </PopoverContent>
+      </Popover>
+    </div>
   )
 }
 
 function ScreenshotViewer({ className, connected }: { className?: string; connected?: boolean }) {
-  const { data, isLoading } = useQuery(trpc.screenshotQuery.queryOptions())
+  const { data: screenshotData, status } = useSubscription(trpc.screenshot.subscriptionOptions())
+
   return (
-    <Card
-      className={cn('aspect-video overflow-hidden grid place-items-center-safe py-0', className)}
-    >
-      {isLoading ? (
-        <Skeleton className="w-full h-full grid place-items-center">
-          <Spinner className="size-4" />
-        </Skeleton>
-      ) : !connected ? (
-        <Empty>
-          <EmptyHeader>
-            <EmptyTitle>Connection Required</EmptyTitle>
-          </EmptyHeader>
-          <EmptyDescription>
-            Screenshot unavailable. Please check your connection to the server.
-          </EmptyDescription>
-        </Empty>
-      ) : data ? (
-        <img
-          src={`data:image/png;base64,${data}`}
-          alt="Live screenshot"
-          className="w-full h-full object-contain"
-        />
-      ) : (
-        <Empty>
-          <EmptyHeader>
-            <EmptyTitle>No screenshot available</EmptyTitle>
-          </EmptyHeader>
-        </Empty>
-      )}
+    <Card className={cn('aspect-video overflow-hidden flex flex-col py-0', className)}>
+      {/* Progress bar at top - only show after first estimate */}
+      {/* Screenshot display area */}
+      <div className="flex-1 grid place-items-center-safe">
+        {!screenshotData ? (
+          connected || status === 'pending' ? (
+            <Skeleton className="w-full h-full grid place-items-center">
+              <Spinner className="size-4" />
+            </Skeleton>
+          ) : (
+            <Empty>
+              <EmptyHeader>
+                <EmptyTitle>Connection Required</EmptyTitle>
+              </EmptyHeader>
+              <EmptyDescription>
+                Screenshot unavailable. Please check your connection to the server.
+              </EmptyDescription>
+            </Empty>
+          )
+        ) : screenshotData.connected && screenshotData.screenshot ? (
+          <img
+            src={`data:image/png;base64,${screenshotData.screenshot}`}
+            alt="Live screenshot"
+            className="w-full h-full object-contain"
+          />
+        ) : (
+          <Empty>
+            <EmptyHeader>
+              <EmptyTitle>No screenshot available</EmptyTitle>
+            </EmptyHeader>
+            <EmptyDescription>
+              {screenshotData.connected ? 'Waiting for screenshot data...' : 'Device is offline'}
+            </EmptyDescription>
+          </Empty>
+        )}
+      </div>
     </Card>
   )
 }
@@ -460,7 +568,7 @@ function TaskItem({
 function LockToggle({
   isLocked,
   connected,
-  className,
+  className: _className,
 }: {
   isLocked: boolean
   connected: boolean

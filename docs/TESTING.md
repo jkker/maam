@@ -180,8 +180,8 @@ await fixture.simulateWorkflow()
 class MaaDeviceFixture {
   constructor(
     manager: MaaManager,
-    autoPolling = true,      // Auto-start polling
-    pollIntervalMs = 100,    // Polling frequency
+    autoPolling = true, // Auto-start polling
+    pollIntervalMs = 100, // Polling frequency
   )
 }
 ```
@@ -190,13 +190,13 @@ class MaaDeviceFixture {
 
 The fixture simulates realistic execution times:
 
-| Task Type | Execution Time |
-|-----------|----------------|
-| HeartBeat | 10ms |
-| StopTask | 50ms |
-| CaptureImageNow | 100ms |
-| CaptureImage | 100ms |
-| LinkStart (all variants) | 200ms |
+| Task Type                | Execution Time |
+| ------------------------ | -------------- |
+| HeartBeat                | 10ms           |
+| StopTask                 | 50ms           |
+| CaptureImageNow          | 100ms          |
+| CaptureImage             | 100ms          |
+| LinkStart (all variants) | 200ms          |
 
 ### Payload Generation
 
@@ -224,7 +224,7 @@ beforeEach(() => {
   // Unique database per test
   const testDbPath = `/tmp/test-maam-${Date.now()}.db`
   process.env.DATABASE_PATH = testDbPath
-  
+
   // Clean and initialize
   initDatabase()
 })
@@ -232,7 +232,7 @@ beforeEach(() => {
 afterEach(() => {
   // Close connection
   closeDatabase()
-  
+
   // Remove test database
   fs.unlinkSync(testDbPath)
 })
@@ -245,11 +245,13 @@ afterEach(() => {
 ```typescript
 it('should perform database operation', async () => {
   // Arrange
-  const testData = { /* ... */ }
-  
+  const testData = {
+    /* ... */
+  }
+
   // Act
   await dbService.saveTask(testData, device)
-  
+
   // Assert
   const result = await dbService.getTaskById(testData.id)
   expect(result).toBeDefined()
@@ -263,23 +265,23 @@ it('should perform database operation', async () => {
 it('should test manager behavior', async () => {
   // Start fixture polling
   fixture.startPolling()
-  
+
   // Create task
   const task = manager.create('LinkStart')
-  
+
   // Wait for completion
   await fixture.waitForTask(task.id, 2000)
-  
+
   // Assert behavior
   expect(task.stage).toBe('DONE')
-  
+
   // Wait for database persistence
-  await new Promise(resolve => setTimeout(resolve, 200))
-  
+  await new Promise((resolve) => setTimeout(resolve, 200))
+
   // Assert persistence
   const savedTask = await dbService.getTaskById(task.id)
   expect(savedTask).toBeDefined()
-  
+
   // Clean up
   fixture.stopPolling()
 })
@@ -291,7 +293,7 @@ it('should test manager behavior', async () => {
 
 ```typescript
 // Wait for async database saves
-await new Promise(resolve => setTimeout(resolve, 200))
+await new Promise((resolve) => setTimeout(resolve, 200))
 ```
 
 ### Testing Lock Operations
@@ -299,17 +301,17 @@ await new Promise(resolve => setTimeout(resolve, 200))
 ```typescript
 it('should handle locked state', async () => {
   fixture.startPolling()
-  
+
   // Lock manager
   await manager.lock()
-  
+
   // Verify immediate tasks still work
   const heartbeat = manager.create('HeartBeat')
   expect(heartbeat).toBeDefined()
-  
+
   // Verify queued tasks are blocked
   expect(() => manager.create('LinkStart')).toThrow('Manager locked')
-  
+
   fixture.stopPolling()
 })
 ```
@@ -319,24 +321,24 @@ it('should handle locked state', async () => {
 ```typescript
 it('should handle complete workflow', async () => {
   fixture.startPolling()
-  
+
   // Create multiple tasks
   const tasks = [
     manager.create('HeartBeat'),
     manager.create('LinkStart'),
     manager.create('CaptureImage'),
   ]
-  
+
   // Wait for all to complete
-  await Promise.all(tasks.map(t => fixture.waitForTask(t.id)))
-  
+  await Promise.all(tasks.map((t) => fixture.waitForTask(t.id)))
+
   // Send logs
   fixture.sendLog('[MAA] Workflow complete')
-  
+
   fixture.stopPolling()
-  
+
   // Verify database persistence
-  await new Promise(resolve => setTimeout(resolve, 200))
+  await new Promise((resolve) => setTimeout(resolve, 200))
   const savedTasks = await dbService.getTasksByDevice('test-device')
   expect(savedTasks.length).toBeGreaterThanOrEqual(2) // Excludes immediate tasks
 })
@@ -357,11 +359,11 @@ import { DEBUG } from '../lib/logger'
 it('should verify database state', async () => {
   // Perform operations
   await dbService.saveTask(taskData, device)
-  
+
   // Inspect database directly
   const allTasks = await db.select().from(tasks)
   console.log('All tasks:', allTasks)
-  
+
   // Useful for debugging unexpected test failures
 })
 ```
@@ -371,11 +373,11 @@ it('should verify database state', async () => {
 ```typescript
 it('should verify fixture state', async () => {
   fixture.startPolling()
-  
+
   // Log internal state
   console.log('Queue length:', fixture['taskQueue'].length)
   console.log('Current task:', fixture['currentTask'])
-  
+
   fixture.stopPolling()
 })
 ```
@@ -432,7 +434,7 @@ If tests fail:
 ```typescript
 // Ensure database is closed before deleting
 closeDatabase()
-await new Promise(resolve => setTimeout(resolve, 50))
+await new Promise((resolve) => setTimeout(resolve, 50))
 fs.unlinkSync(testDbPath)
 ```
 
@@ -445,7 +447,7 @@ Increase timeouts and wait times:
 await fixture.waitForTask(task.id, 5000) // 5 seconds
 
 // Increase database persistence wait
-await new Promise(resolve => setTimeout(resolve, 500))
+await new Promise((resolve) => setTimeout(resolve, 500))
 ```
 
 ## Future Test Enhancements

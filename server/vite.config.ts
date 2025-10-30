@@ -8,7 +8,7 @@ export default defineConfig(({ mode }) => ({
     ssr: true,
     lib: {
       formats: ['es'],
-      entry: ['src/index.ts', 'src/server.ts'],
+      entry: ['src/index.ts', 'src/server.ts', 'src/test-server.ts'],
     },
     emptyOutDir: true,
   },

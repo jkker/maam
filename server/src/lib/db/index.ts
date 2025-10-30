@@ -28,19 +28,19 @@ function ensureDbDir(dbPath: string) {
 
 function getDatabase() {
   const dbPath = getDbPath()
-  
+
   // Reinitialize if path changed
   if (currentDbPath !== dbPath && sqlite) {
     sqlite.close()
     sqlite = null
     dbInstance = null
   }
-  
+
   if (!sqlite) {
     currentDbPath = dbPath
     ensureDbDir(dbPath)
     logger.info(`Database path: ${dbPath}`)
-    
+
     sqlite = new Database(dbPath)
     sqlite.pragma('journal_mode = WAL')
     sqlite.pragma('foreign_keys = ON')

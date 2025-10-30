@@ -20,25 +20,29 @@ interface VariablesContext {
   manager: MaaManager
 }
 
-const managers = new Map<string, MaaManager>()
-
 export const manager = new MaaManager('bdc57941058a47e6bf56f2a993c87af3', 'user')
-
-manager.addSchedule({ task: 'HeartBeat', hour: 0 })
-manager.addSchedule({ task: 'LinkStart', hour: 3 })
-manager.addSchedule({ task: 'LinkStart', hour: 11 })
-manager.addSchedule({ task: 'LinkStart', hour: 19 })
-
-managers.set(manager.device, manager)
 
 /**
  * Initialize tRPC with SSE support for subscriptions
+ */
+/**
+ * Initializes a tRPC instance with custom context and configuration options.
+ *
+ * @template VariablesContext - The type of the context available to tRPC procedures.
+ *
+ * @param sse - Configuration for Server-Sent Events (SSE).
+ * @param sse.ping.enabled - Enables periodic ping messages to keep SSE connections alive.
+ * @param sse.ping.intervalMs - Interval in milliseconds between ping messages.
+ *
+ * @remarks
+ * - The `context<VariablesContext>()` method sets the type for the context object available in all tRPC procedures.
+ * - The `sse` option configures SSE support, allowing the server to send keep-alive pings to clients.
+ * - See {@link https://trpc.io/docs/server-sent-events} for more details on SSE configuration in tRPC.
  */
 const t = initTRPC.context<VariablesContext>().create({
   sse: {
     ping: {
       enabled: true,
-      intervalMs: 2_000,
     },
   },
 })
@@ -119,6 +123,11 @@ export const router = t.router({
     yield ctx.manager.logs.slice(-50)
     yield* ctx.manager.listen('deviceLog', { signal })
   }),
+
+  /**
+   * Get estimated screenshot refresh interval
+   */
+  screenshotInterval: t.procedure.query(({ ctx }) => ctx.manager.getEstimatedInterval()),
 
   eventCalendar: t.procedure.query(async () => fetchUpcomingEvents()),
 })

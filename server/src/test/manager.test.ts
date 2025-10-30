@@ -15,7 +15,7 @@ describe('MaaManager with Device Fixture', () => {
   beforeEach(() => {
     // Set test database path
     process.env.DATABASE_PATH = testDbPath
-    
+
     // Remove existing test database
     try {
       if (fs.existsSync(testDbPath)) fs.unlinkSync(testDbPath)
@@ -24,7 +24,7 @@ describe('MaaManager with Device Fixture', () => {
     } catch (e) {
       // Ignore errors
     }
-    
+
     // Initialize database
     initDatabase()
 
@@ -38,14 +38,14 @@ describe('MaaManager with Device Fixture', () => {
     // Cleanup
     fixture.cleanup()
     manager.scheduler.stop()
-    
+
     // Close database connection
     try {
       closeDatabase()
     } catch (e) {
       // Ignore errors
     }
-    
+
     // Remove test database
     try {
       if (fs.existsSync(testDbPath)) fs.unlinkSync(testDbPath)
@@ -64,10 +64,10 @@ describe('MaaManager with Device Fixture', () => {
 
       // Simulate MAA client polling
       fixture.startPolling()
-      
+
       // Wait for task to complete
       const completedTask = await fixture.waitForTask(task.id, 2000)
-      
+
       expect(completedTask).toBeDefined()
       expect(completedTask?.stage).toBe('DONE')
       expect(completedTask?.status).toBeDefined()
@@ -81,15 +81,15 @@ describe('MaaManager with Device Fixture', () => {
 
       fixture.startPolling()
       const completedTask = await fixture.waitForTask(task.id, 1000)
-      
+
       expect(completedTask?.stage).toBe('DONE')
-      
+
       fixture.stopPolling()
     })
 
     it('should persist task to database', async () => {
       const task = manager.create('LinkStart')
-      
+
       // Wait for async database save
       await new Promise((resolve) => setTimeout(resolve, 100))
 
@@ -101,7 +101,7 @@ describe('MaaManager with Device Fixture', () => {
 
     it('should update task in database on completion', async () => {
       const task = manager.create('LinkStart')
-      
+
       fixture.startPolling()
       await fixture.waitForTask(task.id, 2000)
       fixture.stopPolling()
@@ -125,7 +125,7 @@ describe('MaaManager with Device Fixture', () => {
       })
 
       expect(scheduleData.id).toBe('LinkStart|3:15')
-      
+
       // Wait for async database save to complete
       await new Promise((resolve) => setTimeout(resolve, 200))
 
@@ -167,9 +167,9 @@ describe('MaaManager with Device Fixture', () => {
   describe('Lock/Unlock Operations', () => {
     it('should lock manager and persist state', async () => {
       fixture.startPolling()
-      
+
       const result = await manager.lock()
-      
+
       expect(manager.locked).toBe(true)
       // Result might be false if no task was running
       expect(result).toBeDefined()
@@ -185,12 +185,12 @@ describe('MaaManager with Device Fixture', () => {
 
     it('should unlock manager and persist state', async () => {
       fixture.startPolling()
-      
+
       await manager.lock()
-      
+
       // Wait for lock to settle
       await new Promise((resolve) => setTimeout(resolve, 100))
-      
+
       await manager.unlock()
 
       expect(manager.locked).toBe(false)
@@ -206,17 +206,17 @@ describe('MaaManager with Device Fixture', () => {
 
     it('should prevent queued tasks when locked', async () => {
       fixture.startPolling()
-      
+
       await manager.lock()
 
       expect(() => manager.create('LinkStart')).toThrow('Manager locked')
-      
+
       fixture.stopPolling()
     })
 
     it('should allow immediate tasks when locked', async () => {
       fixture.startPolling()
-      
+
       await manager.lock()
 
       const task = manager.create('HeartBeat')
