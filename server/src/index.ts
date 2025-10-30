@@ -192,7 +192,23 @@ export const app = new Hono<{ Variables: VariablesContext }>()
   })
   // management endpoints
   .get('/maa/lock', async (c) => c.text((await manager.lock()).message))
-  .get('/maa/unlock', async (c) => c.text((await manager.unlock()).message))
+  .get('/maa/unlock', (c) => {
+    // Parse delay parameter (in minutes), default to 10 minutes
+    const delayMinutes = Number(c.req.query('delay')) || 10
+    const delay = { minutes: delayMinutes }
+
+    if (manager.locked) {
+      const { scheduledFor, delayDuration } = manager.scheduleUnlock(delay)
+      const { hours, minutes } = delayDuration
+      let message = `MAA将在`
+      if (hours > 0) message += `${hours}小时`
+      if (minutes > 0) message += `${minutes}分钟`
+      message += `后出笼（${scheduledFor.toPlainTime().toString({ smallestUnit: 'minute' })}）。`
+      return c.text(message)
+    } else {
+      return c.text('MAA已经在外面溜达了。')
+    }
+  })
 
 // In development, redirect all other routes to the Vite dev server
 if (import.meta.env.DEV) app.get('*', (c) => c.redirect('http://localhost:3113'))
