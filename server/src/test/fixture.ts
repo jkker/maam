@@ -1,5 +1,6 @@
-import { MaaManager, Task } from '../MaaManager'
 import type { TaskType } from '../lib/schema'
+
+import { MaaManager, Task } from '../MaaManager'
 
 /**
  * Mock MAA device fixture for testing
@@ -23,7 +24,7 @@ export class MaaDeviceFixture {
     if (this.pollInterval) return
 
     this.pollInterval = setInterval(async () => {
-      await this.pollTasks()
+      this.pollTasks()
       await this.processNextTask()
     }, this.pollIntervalMs)
   }
@@ -41,7 +42,7 @@ export class MaaDeviceFixture {
   /**
    * Poll tasks from manager (simulates POST /maa/getTask)
    */
-  async pollTasks() {
+  pollTasks() {
     const tasks = this.manager.getTask()
     this.taskQueue.push(...tasks)
     return tasks
@@ -54,7 +55,7 @@ export class MaaDeviceFixture {
     if (this.currentTask || this.taskQueue.length === 0) return
 
     this.currentTask = this.taskQueue.shift()!
-    const { id, type, params } = this.currentTask
+    const { id, type } = this.currentTask
 
     // Simulate task execution delay
     const executionTime = this.getExecutionTime(type)
@@ -62,7 +63,7 @@ export class MaaDeviceFixture {
 
     // Report task completion
     const success = Math.random() > 0.1 // 90% success rate
-    await this.reportStatus(id, success ? 'SUCCESS' : 'FAILED', this.generatePayload(type))
+    this.reportStatus(id, success ? 'SUCCESS' : 'FAILED', this.generatePayload(type))
 
     this.currentTask = undefined
   }
@@ -70,7 +71,7 @@ export class MaaDeviceFixture {
   /**
    * Report task status to manager (simulates POST /maa/reportStatus)
    */
-  async reportStatus(taskId: string, status: 'SUCCESS' | 'FAILED', payload?: string) {
+  reportStatus(taskId: string, status: 'SUCCESS' | 'FAILED', payload?: string) {
     this.manager.reportStatus({
       task: taskId,
       status,
@@ -81,7 +82,7 @@ export class MaaDeviceFixture {
   /**
    * Send device log to manager (simulates POST /maa/deviceLog)
    */
-  async sendLog(message: string) {
+  sendLog(message: string) {
     this.manager.deviceLog(message)
   }
 

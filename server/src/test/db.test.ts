@@ -1,8 +1,9 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { dbService } from '../lib/db/service'
-import { initDatabase, closeDatabase } from '../lib/db'
 import fs from 'node:fs'
-import path from 'node:path'
+
+import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+
+import { initDatabase, closeDatabase } from '../lib/db'
+import { dbService } from '../lib/db/service'
 
 describe('Database Service', () => {
   const testDbPath = `/tmp/test-maam-${Date.now()}.db`

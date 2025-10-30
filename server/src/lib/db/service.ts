@@ -1,8 +1,11 @@
-import { eq, desc, and } from 'drizzle-orm'
-import { db } from './index'
-import { tasks, schedules, managerState, deviceLogs } from './schema'
 import type { TaskData, ScheduleData } from '../../MaaManager'
+
+import { eq, desc } from 'drizzle-orm'
+
+import { tasks, schedules, managerState, deviceLogs } from './schema'
 import { logger } from '../logger'
+
+import { db } from './index'
 
 export class DatabaseService {
   /**
@@ -30,7 +33,7 @@ export class DatabaseService {
     }
   }
 
-  async updateTask(taskData: TaskData, device: string) {
+  async updateTask(taskData: TaskData, _device: string) {
     try {
       await db
         .update(tasks)

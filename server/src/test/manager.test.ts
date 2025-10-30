@@ -1,9 +1,11 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+import fs from 'node:fs'
+
+import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+
 import { MaaManager } from '../MaaManager'
 import { MaaDeviceFixture, createTestManager } from './fixture'
-import { dbService } from '../lib/db/service'
 import { initDatabase, closeDatabase } from '../lib/db'
-import fs from 'node:fs'
+import { dbService } from '../lib/db/service'
 
 describe('MaaManager with Device Fixture', () => {
   const testDbPath = `/tmp/test-maam-manager-${Date.now()}.db`

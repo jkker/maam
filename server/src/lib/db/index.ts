@@ -1,8 +1,10 @@
-import Database from 'better-sqlite3'
-import { drizzle } from 'drizzle-orm/better-sqlite3'
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+
+import Database from 'better-sqlite3'
+import { drizzle } from 'drizzle-orm/better-sqlite3'
+
 import * as schema from './schema'
 import { logger } from '../logger'
 
@@ -49,6 +51,7 @@ function getDatabase() {
 
 export const db = new Proxy({} as ReturnType<typeof drizzle>, {
   get(_, prop) {
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-return
     return Reflect.get(getDatabase(), prop)
   },
 })
@@ -69,8 +72,8 @@ export function closeDatabase() {
  * Initialize database tables if they don't exist
  */
 export function initDatabase() {
-  const db = getDatabase()
-  
+  getDatabase()
+
   sqlite!.exec(`
     CREATE TABLE IF NOT EXISTS tasks (
       id TEXT PRIMARY KEY,

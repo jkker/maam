@@ -2,6 +2,7 @@ import { EventEmitter } from 'node:events'
 
 import { CronJob, Task as ScheduledTask, ToadScheduler } from 'toad-scheduler'
 
+import { dbService } from './lib/db/service'
 import { DEBUG, logger } from './lib/logger'
 
 import {
@@ -14,7 +15,6 @@ import {
 } from './lib/schema'
 
 import { getNow } from './lib/temporal'
-import { dbService } from './lib/db/service'
 
 /**
  * Runtime representation of a Maa task, including life-cycle state transitions.
@@ -278,7 +278,7 @@ export class MaaManager extends EventEmitter<MaaManagerEventMap> {
     })
     
     // Initialize manager state in database
-    this.initializeDatabase()
+    void this.initializeDatabase()
   }
   
   /**
