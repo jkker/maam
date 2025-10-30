@@ -7,10 +7,14 @@ import { logger as loggerMiddleware } from 'hono/logger'
 import { mimes } from 'hono/utils/mime'
 import { z } from 'zod'
 
+import { initDatabase } from './lib/db'
 import { DEBUG, logger } from './lib/logger'
 import { fetchUpcomingEvents } from './lib/prts.wiki'
 import { reportSchema, scheduleSchema, TASK_TYPE } from './lib/schema'
 import { MaaManager, type ScheduleData, type TaskData } from './MaaManager'
+
+// Initialize database
+initDatabase()
 
 interface VariablesContext {
   manager: MaaManager
