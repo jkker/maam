@@ -53,9 +53,11 @@ import { ButtonGroup } from './components/ui/button-group'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './components/ui/card'
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from './components/ui/empty'
 import { Field, FieldLabel } from './components/ui/field'
+import { Progress } from './components/ui/progress'
 import { ScrollArea } from './components/ui/scroll-area'
 import { Skeleton } from './components/ui/skeleton'
 import { Spinner } from './components/ui/spinner'
+import { useScreenshotCountdown } from './hooks/useScreenshotCountdown'
 import { Footer, Header } from './Layout'
 import { queryClient, trpc } from './lib/trpc'
 import { cn, formatDuration, formatTaskType, formatTime } from './utils'
@@ -297,37 +299,81 @@ function QuickActions({ locked, connected }: { locked: boolean; connected: boole
 }
 
 function ScreenshotViewer({ className, connected }: { className?: string; connected?: boolean }) {
-  const { data, isLoading } = useQuery(trpc.screenshotQuery.queryOptions())
+  const { data: screenshotData } = useSubscription({
+    ...trpc.screenshot.subscriptionOptions(),
+    enabled: connected ?? false,
+  })
+  
+  const { data: intervalData } = useQuery({
+    ...trpc.screenshotInterval.queryOptions(),
+    enabled: connected ?? false,
+    refetchInterval: 5000, // Refetch every 5s to update confidence
+  })
+  
+  const { progress, remainingMs } = useScreenshotCountdown(
+    intervalData?.intervalMs,
+    screenshotData?.timestamp,
+  )
+  
+  const hasEstimate = intervalData && intervalData.intervalMs && intervalData.confidence > 0
+  const isHighConfidence = intervalData && intervalData.confidence >= 0.5
+  
   return (
     <Card
-      className={cn('aspect-video overflow-hidden grid place-items-center-safe py-0', className)}
+      className={cn('aspect-video overflow-hidden flex flex-col py-0', className)}
     >
-      {isLoading ? (
-        <Skeleton className="w-full h-full grid place-items-center">
-          <Spinner className="size-4" />
-        </Skeleton>
-      ) : !connected ? (
-        <Empty>
-          <EmptyHeader>
-            <EmptyTitle>Connection Required</EmptyTitle>
-          </EmptyHeader>
-          <EmptyDescription>
-            Screenshot unavailable. Please check your connection to the server.
-          </EmptyDescription>
-        </Empty>
-      ) : data ? (
-        <img
-          src={`data:image/png;base64,${data}`}
-          alt="Live screenshot"
-          className="w-full h-full object-contain"
-        />
-      ) : (
-        <Empty>
-          <EmptyHeader>
-            <EmptyTitle>No screenshot available</EmptyTitle>
-          </EmptyHeader>
-        </Empty>
+      {/* Progress bar at top - only show after first estimate */}
+      {hasEstimate && (
+        <div className="px-4 pt-4 pb-2 space-y-2">
+          <div className="flex items-center justify-between text-xs text-muted-foreground">
+            <span>
+              Next refresh in {Math.ceil(remainingMs / 1000)}s
+              {!isHighConfidence && ' (estimating...)'}
+            </span>
+            <span>
+              Interval: ~{Math.round(intervalData.intervalMs! / 1000)}s
+            </span>
+          </div>
+          <Progress value={progress} className="h-1" />
+        </div>
       )}
+      
+      {/* Screenshot display area */}
+      <div className="flex-1 grid place-items-center-safe">
+        {!screenshotData ? (
+          !connected ? (
+            <Empty>
+              <EmptyHeader>
+                <EmptyTitle>Connection Required</EmptyTitle>
+              </EmptyHeader>
+              <EmptyDescription>
+                Screenshot unavailable. Please check your connection to the server.
+              </EmptyDescription>
+            </Empty>
+          ) : (
+            <Skeleton className="w-full h-full grid place-items-center">
+              <Spinner className="size-4" />
+            </Skeleton>
+          )
+        ) : screenshotData.connected && screenshotData.screenshot ? (
+          <img
+            src={`data:image/png;base64,${screenshotData.screenshot}`}
+            alt="Live screenshot"
+            className="w-full h-full object-contain"
+          />
+        ) : (
+          <Empty>
+            <EmptyHeader>
+              <EmptyTitle>No screenshot available</EmptyTitle>
+            </EmptyHeader>
+            <EmptyDescription>
+              {screenshotData.connected 
+                ? 'Waiting for screenshot data...' 
+                : 'Device is offline'}
+            </EmptyDescription>
+          </Empty>
+        )}
+      </div>
     </Card>
   )
 }
@@ -460,7 +506,7 @@ function TaskItem({
 function LockToggle({
   isLocked,
   connected,
-  className,
+  className: _className,
 }: {
   isLocked: boolean
   connected: boolean

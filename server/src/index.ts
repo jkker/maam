@@ -116,6 +116,11 @@ export const router = t.router({
     yield* ctx.manager.listen('deviceLog', { signal })
   }),
 
+  /**
+   * Get estimated screenshot refresh interval
+   */
+  screenshotInterval: t.procedure.query(({ ctx }) => ctx.manager.getEstimatedInterval()),
+
   eventCalendar: t.procedure.query(async () => fetchUpcomingEvents()),
 })
 

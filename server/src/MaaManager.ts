@@ -250,6 +250,9 @@ export class MaaManager extends EventEmitter<MaaManagerEventMap> {
 
   // Screenshot polling state
   private screenshotIntervalId?: NodeJS.Timeout
+  private screenshotTimestamps: number[] = []
+  private readonly MAX_TIMESTAMP_HISTORY = 10
+  private estimatedIntervalMs?: number
 
   /**
    * @param device - Allowed Maa device identifier.
@@ -527,6 +530,49 @@ export class MaaManager extends EventEmitter<MaaManagerEventMap> {
     return tasks
   }
 
+  /**
+   * Records a screenshot timestamp and calculates estimated interval
+   */
+  private recordScreenshotTimestamp(timestamp: number) {
+    this.screenshotTimestamps.push(timestamp)
+    
+    // Keep only recent history
+    if (this.screenshotTimestamps.length > this.MAX_TIMESTAMP_HISTORY) {
+      this.screenshotTimestamps.shift()
+    }
+    
+    // Calculate estimated interval if we have at least 2 timestamps
+    if (this.screenshotTimestamps.length >= 2) {
+      const intervals: number[] = []
+      for (let i = 1; i < this.screenshotTimestamps.length; i++) {
+        intervals.push(this.screenshotTimestamps[i] - this.screenshotTimestamps[i - 1])
+      }
+      
+      // Use moving average of intervals
+      const sum = intervals.reduce((acc, val) => acc + val, 0)
+      this.estimatedIntervalMs = Math.round(sum / intervals.length)
+      
+      logger.debug(`Estimated screenshot interval: ${this.estimatedIntervalMs}ms (based on ${intervals.length} samples)`)
+    }
+  }
+
+  /**
+   * Gets the estimated screenshot refresh interval
+   */
+  public getEstimatedInterval(): { intervalMs?: number; confidence: number } {
+    const sampleCount = this.screenshotTimestamps.length - 1 // intervals = timestamps - 1
+    
+    // Confidence increases with more samples, maxing at 1.0 when we have full history
+    const confidence = sampleCount > 0 
+      ? Math.min(sampleCount / (this.MAX_TIMESTAMP_HISTORY - 1), 1.0)
+      : 0
+    
+    return {
+      intervalMs: this.estimatedIntervalMs,
+      confidence
+    }
+  }
+
   private startScreenshotPolling() {
     if (this.screenshotIntervalId) {
       logger.debug('Screenshot polling already active, skipping start')
@@ -543,6 +589,10 @@ export class MaaManager extends EventEmitter<MaaManagerEventMap> {
           seconds: 10,
         })
         if (!payload || !completedAt) throw new Error('No screenshot payload received')
+
+        // Record timestamp for interval estimation
+        const timestamp = Date.now()
+        this.recordScreenshotTimestamp(timestamp)
 
         this.emit('screenshot', {
           screenshot: payload,
