@@ -9,22 +9,36 @@ import { logger } from '../logger'
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
-// Default to data directory in project root
-const dbPath = process.env.DATABASE_PATH || path.join(__dirname, '../../../data/maam.db')
-
-// Ensure data directory exists
-const dbDir = path.dirname(dbPath)
-if (!fs.existsSync(dbDir)) {
-  fs.mkdirSync(dbDir, { recursive: true })
-}
-
-logger.info(`Database path: ${dbPath}`)
-
+let currentDbPath: string | null = null
 let sqlite: Database.Database | null = null
 let dbInstance: ReturnType<typeof drizzle> | null = null
 
+function getDbPath() {
+  return process.env.DATABASE_PATH || path.join(__dirname, '../../../data/maam.db')
+}
+
+function ensureDbDir(dbPath: string) {
+  const dbDir = path.dirname(dbPath)
+  if (!fs.existsSync(dbDir)) {
+    fs.mkdirSync(dbDir, { recursive: true })
+  }
+}
+
 function getDatabase() {
+  const dbPath = getDbPath()
+  
+  // Reinitialize if path changed
+  if (currentDbPath !== dbPath && sqlite) {
+    sqlite.close()
+    sqlite = null
+    dbInstance = null
+  }
+  
   if (!sqlite) {
+    currentDbPath = dbPath
+    ensureDbDir(dbPath)
+    logger.info(`Database path: ${dbPath}`)
+    
     sqlite = new Database(dbPath)
     sqlite.pragma('journal_mode = WAL')
     sqlite.pragma('foreign_keys = ON')
@@ -47,6 +61,7 @@ export function closeDatabase() {
     sqlite.close()
     sqlite = null
     dbInstance = null
+    currentDbPath = null
   }
 }
 

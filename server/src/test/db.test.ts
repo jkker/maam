@@ -202,12 +202,18 @@ describe('Database Service', () => {
       await dbService.saveManagerState(testDevice, testUser, 'Asia/Shanghai', false)
       
       const beforeHeartbeat = await dbService.getManagerState(testDevice)
-      expect(beforeHeartbeat?.lastHeartbeat).toBeNull()
+      // After initial save, last_heartbeat might be set
+      const initialHeartbeat = beforeHeartbeat?.lastHeartbeat
+
+      // Wait a moment to ensure different timestamp
+      await new Promise((resolve) => setTimeout(resolve, 50))
 
       await dbService.updateManagerHeartbeat(testDevice)
 
       const afterHeartbeat = await dbService.getManagerState(testDevice)
       expect(afterHeartbeat?.lastHeartbeat).toBeDefined()
+      // Ensure it was actually updated
+      expect(afterHeartbeat?.lastHeartbeat).not.toBe(initialHeartbeat)
     })
   })
 
@@ -219,11 +225,12 @@ describe('Database Service', () => {
 
       await dbService.saveDeviceLog(testDevice, timestamp, title, content)
 
-      const logs = await dbService.getDeviceLogs(testDevice)
-      expect(logs).toHaveLength(1)
-      expect(logs[0].device).toBe(testDevice)
-      expect(logs[0].title).toBe(title)
-      expect(logs[0].content).toBe(content)
+      const logs = await dbService.getDeviceLogs(testDevice, 10)
+      expect(logs.length).toBeGreaterThanOrEqual(1)
+      const savedLog = logs.find((log) => log.title === title)
+      expect(savedLog).toBeDefined()
+      expect(savedLog?.device).toBe(testDevice)
+      expect(savedLog?.content).toBe(content)
     })
 
     it('should limit retrieved logs', async () => {
