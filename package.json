@@ -6,6 +6,7 @@
     "build": "pnpm -r build",
     "build:docker": "docker build -t maam . && mkdir -p dist && docker save -o dist/maam.tar maam",
     "start": "pnpm -F @maam/server start",
+    "start:test": "pnpm -F @maam/server start:test",
     "start:docker": "docker run -p 3113:3113 maam",
     "lint": "eslint",
     "lint:fix": "eslint --fix .",
@@ -13,6 +14,7 @@
     "format:fix": "prettier --write .",
     "typecheck": "pnpm -r typecheck",
     "test": "vitest",
+    "test:e2e": "pnpm -F @maam/server test:e2e",
     "test:watch": "vitest --watch",
     "ci": "pnpm build && pnpm lint && pnpm typecheck && pnpm test",
     "maam": "git pull && pnpm install --frozen-lockfile && pnpm build && pnpm start"
