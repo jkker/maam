@@ -272,7 +272,7 @@ function AddScheduleDialog({
               <SelectContent>
                 {TASK_TYPE.map((type) => (
                   <SelectItem key={type} value={type}>
-                    {type}
+                    {formatTaskType(type)}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -333,7 +333,7 @@ function EditScheduleDialog({
         <div className="space-y-4">
           <div className="space-y-2">
             <Label>Task Type</Label>
-            <div className="text-sm font-medium">{schedule.type}</div>
+            <div className="text-sm font-medium">{formatTaskType(schedule.type)}</div>
           </div>
           <div className="space-y-2">
             <Label>Time</Label>

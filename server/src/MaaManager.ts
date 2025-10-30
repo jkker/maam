@@ -253,7 +253,7 @@ export class MaaManager extends EventEmitter<MaaManagerEventMap> {
   private screenshotIntervalId?: NodeJS.Timeout
   private screenshotTimestamps: number[] = []
   private readonly MAX_TIMESTAMP_HISTORY = 10
-  private estimatedIntervalMs?: number
+  private estimatedIntervalMs = 1000
 
   /**
    * @param device - Allowed Maa device identifier.
@@ -657,19 +657,13 @@ export class MaaManager extends EventEmitter<MaaManagerEventMap> {
   }
 
   /**
-   * Gets the estimated screenshot refresh interval
+   * Gets the estimated screenshot refresh interval in seconds
+   * Returns null if no interval has been established yet
    */
-  public getEstimatedInterval(): { intervalMs?: number; confidence: number } {
-    const sampleCount = this.screenshotTimestamps.length - 1 // intervals = timestamps - 1
-
-    // Confidence increases with more samples, maxing at 1.0 when we have full history
-    const confidence =
-      sampleCount > 0 ? Math.min(sampleCount / (this.MAX_TIMESTAMP_HISTORY - 1), 1.0) : 0
-
-    return {
-      intervalMs: this.estimatedIntervalMs,
-      confidence,
-    }
+  public getEstimatedInterval(): number | null {
+    if (!this.estimatedIntervalMs) return null
+    // Round to nearest second to reduce noise and rerenders
+    return Math.round(this.estimatedIntervalMs / 1000)
   }
 
   private startScreenshotPolling() {

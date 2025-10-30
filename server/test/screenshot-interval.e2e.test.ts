@@ -51,7 +51,7 @@ describe('Screenshot Interval Estimation E2E', () => {
 
     const title = await page.title()
     expect(title).toBe('MAAM')
-  })
+  }, 15000)
 
   it('should display screenshot after device connects', async () => {
     await page.goto(BASE_URL)
@@ -62,7 +62,7 @@ describe('Screenshot Interval Estimation E2E', () => {
 
     const screenshot = page.locator('img[alt="Live screenshot"]')
     expect(await screenshot.isVisible()).toBe(true)
-  })
+  }, 20000)
 
   it('should estimate polling interval after multiple screenshots', async () => {
     await page.goto(BASE_URL)
@@ -79,7 +79,7 @@ describe('Screenshot Interval Estimation E2E', () => {
     const intervalText = await page.locator('text=/Interval: ~\\d+s/').textContent()
     expect(intervalText).toBeTruthy()
     expect(intervalText).toMatch(/Interval: ~\d+s/)
-  })
+  }, 15000)
 
   it('should display countdown progress bar', async () => {
     await page.goto(BASE_URL)
@@ -97,34 +97,34 @@ describe('Screenshot Interval Estimation E2E', () => {
     // Check for progress bar
     const progressBar = await page.locator('[role="progressbar"]').count()
     expect(progressBar).toBeGreaterThan(0)
-  })
+  }, 15000)
 
-  it('should show estimating indicator when confidence is low', async () => {
+  it('should display interval estimate after first screenshot', async () => {
     await page.goto(BASE_URL)
     await page.waitForLoadState('networkidle')
 
-    // Wait for first few screenshots (low confidence)
+    // Wait for first screenshot
     await page.waitForSelector('img[alt="Live screenshot"]', { timeout: 15000 })
     await new Promise((resolve) => setTimeout(resolve, POLLING_INTERVAL * 2))
 
-    // Should show "(estimating...)" when confidence < 0.5
-    const hasEstimating = await page.locator('text=(estimating...)').count()
-    expect(hasEstimating).toBeGreaterThan(0)
-  })
+    // Should show interval estimate after enough samples
+    const intervalText = await page.locator('text=/Interval: ~\\d+s/').textContent()
+    expect(intervalText).toBeTruthy()
+  }, 15000)
 
-  it('should hide estimating indicator when confidence is high', async () => {
+  it('should display stable interval after multiple screenshots', async () => {
     await page.goto(BASE_URL)
     await page.waitForLoadState('networkidle')
 
-    // Wait for many screenshots (high confidence)
+    // Wait for many screenshots to stabilize estimate
     await page.waitForSelector('img[alt="Live screenshot"]', { timeout: 15000 })
-    // Need at least 6 samples for confidence >= 0.5
     await new Promise((resolve) => setTimeout(resolve, POLLING_INTERVAL * 7))
 
-    // Should NOT show "(estimating...)" when confidence >= 0.5
-    const hasEstimating = await page.locator('text=(estimating...)').count()
-    expect(hasEstimating).toBe(0)
-  })
+    // Should show stable interval (no confidence indicator anymore)
+    const intervalText = await page.locator('text=/Interval: ~\\d+s/').textContent()
+    expect(intervalText).toBeTruthy()
+    expect(intervalText).toMatch(/Interval: ~\d+s/)
+  }, 20000)
 
   it('should update progress bar smoothly', async () => {
     await page.goto(BASE_URL)
@@ -152,7 +152,7 @@ describe('Screenshot Interval Estimation E2E', () => {
     // At least one transition should occur
     const hasDecrement = progressValues.some((val, idx) => idx > 0 && val < progressValues[idx - 1])
     expect(hasDecrement).toBe(true)
-  })
+  }, 20000)
 
   it('should request interval data from server', async () => {
     await page.goto(BASE_URL)
@@ -166,10 +166,10 @@ describe('Screenshot Interval Estimation E2E', () => {
     await page.waitForLoadState('networkidle')
 
     // Wait for interval query
-    await new Promise((resolve) => setTimeout(resolve, 6000))
+    await new Promise((resolve) => setTimeout(resolve, 11000)) // Increased to match 10s refetch
 
     // Should have called screenshotInterval endpoint
     const hasIntervalRequest = requests.some((url) => url.includes('screenshotInterval'))
     expect(hasIntervalRequest).toBe(true)
-  })
+  }, 15000)
 })

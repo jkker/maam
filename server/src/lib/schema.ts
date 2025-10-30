@@ -14,23 +14,25 @@ export const TASK_TYPE = [
   'LinkStart-Mission',
   'LinkStart-AutoRoguelike',
   'LinkStart-Reclamation',
+  'Settings-Stage1',
 ] as const
 
 export const T = {
-  LinkStart: '启动链接',
-  'LinkStart-Base': '启动链接-基地',
-  'LinkStart-WakeUp': '启动链接-唤醒',
-  'LinkStart-Combat': '启动链接-战斗',
-  'LinkStart-Recruiting': '启动链接-招募',
-  'LinkStart-Mall': '启动链接-商店',
-  'LinkStart-Mission': '启动链接-任务',
-  'LinkStart-AutoRoguelike': '启动链接-自动刷本',
-  'LinkStart-Reclamation': '启动链接-回收站',
+  LinkStart: '一键长草',
+  'LinkStart-Base': '基地换班',
+  'LinkStart-WakeUp': '自动唤醒',
+  'LinkStart-Combat': '刷理智',
+  'LinkStart-Recruiting': '自动公招',
+  'LinkStart-Mall': '获取信用及购物',
+  'LinkStart-Mission': '领取奖励',
+  'LinkStart-AutoRoguelike': '自动肉鸽',
+  'LinkStart-Reclamation': '生息演算',
   CaptureImageNow: '立即截图',
   CaptureImage: '截图',
   StopTask: '停止',
-  HeartBeat: '心跳',
-}
+  HeartBeat: '测试链接',
+  'Settings-Stage1': '关卡设置',
+} as const
 
 export const TASK_STAGE = ['PENDING', 'RUNNING', 'DONE'] as const
 export const TASK_STATUS = ['PENDING', 'FAILED', 'SUCCESS'] as const
