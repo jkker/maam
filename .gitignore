@@ -30,6 +30,12 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
+# database
+server/data/
+*.db
+*.db-shm
+*.db-wal
+
 # misc
 .DS_Store
 tsconfig.tsbuildinfo

@@ -11,7 +11,6 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@hookform/resolvers": "^5.2.2",
     "@radix-ui/react-accordion": "^1.2.12",
     "@radix-ui/react-collapsible": "^1.1.12",
     "@radix-ui/react-dialog": "^1.1.15",
@@ -28,7 +27,6 @@
     "@radix-ui/react-toggle": "^1.1.10",
     "@schedule-x/calendar": "^3.3.0",
     "@schedule-x/current-time": "^3.3.0",
-    "@schedule-x/event-modal": "^3.3.0",
     "@schedule-x/event-recurrence": "^3.3.0",
     "@schedule-x/react": "^3.3.0",
     "@schedule-x/theme-shadcn": "^3.3.0",

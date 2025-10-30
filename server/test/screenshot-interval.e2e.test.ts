@@ -3,8 +3,6 @@
  * Tests the full workflow with device fixture
  */
 
-/* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-argument */
-
 import type { Browser, Page } from 'playwright'
 
 import { chromium } from 'playwright'
@@ -62,7 +60,7 @@ describe('Screenshot Interval Estimation E2E', () => {
     // Wait for screenshot to appear (fixture needs time to poll and respond)
     await page.waitForSelector('img[alt="Live screenshot"]', { timeout: 15000 })
 
-    const screenshot = await page.locator('img[alt="Live screenshot"]')
+    const screenshot = page.locator('img[alt="Live screenshot"]')
     expect(await screenshot.isVisible()).toBe(true)
   })
 

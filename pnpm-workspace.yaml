@@ -6,6 +6,7 @@ cleanupUnusedCatalogs: true
 
 onlyBuiltDependencies:
   - '@tailwindcss/oxide'
+  - better-sqlite3
   - esbuild
   - simple-git-hooks
   - unrs-resolver
