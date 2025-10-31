@@ -398,13 +398,16 @@ function QuickActions({ locked, connected }: { locked: boolean; connected: boole
   )
 }
 
+// Configuration for screenshot interval polling
+const SERVER_INTERVAL_REFETCH_MS = 10000 // Poll server for interval estimate every 10s
+
 function ScreenshotViewer({ className, connected }: { className?: string; connected?: boolean }) {
   const { data: screenshotData, status } = useSubscription(trpc.screenshot.subscriptionOptions())
 
-  // Poll server for interval estimate (refetch every 10s to get latest estimate)
+  // Poll server for interval estimate
   const { data: serverInterval } = useQuery({
     ...trpc.screenshotInterval.queryOptions(),
-    refetchInterval: 10000,
+    refetchInterval: SERVER_INTERVAL_REFETCH_MS,
   })
 
   const { estimatedInterval, timeRemaining, progress, isStable } = useScreenshotProgress(

@@ -11,6 +11,14 @@ interface ScreenshotProgressState {
   isStable: boolean
 }
 
+// Algorithm constants
+const EMA_HISTORICAL_WEIGHT = 0.7 // Weight for historical average in EMA
+const EMA_NEW_WEIGHT = 0.3 // Weight for new measurement in EMA
+const MAX_SAMPLE_COUNT = 10 // Maximum number of samples to track for stability
+const STABILITY_THRESHOLD = 3 // Minimum samples needed for stable estimate
+const SCREENSHOT_ID_PREFIX_LENGTH = 20 // Length of screenshot hash prefix for ID
+const PROGRESS_UPDATE_INTERVAL_MS = 100 // How often to update countdown (10fps)
+
 /**
  * Hook to manage screenshot progress bar state with robust interval estimation
  * Uses exponential moving average for smooth, stable progress tracking
@@ -27,7 +35,7 @@ export function useScreenshotProgress(
 
   // Detect new screenshot and update interval estimate
   const currentScreenshotId = screenshotData?.screenshot
-    ? `${screenshotData.screenshot.slice(0, 20)}-${screenshotData.timestamp}`
+    ? `${screenshotData.screenshot.slice(0, SCREENSHOT_ID_PREFIX_LENGTH)}-${screenshotData.timestamp}`
     : null
 
   useEffect(() => {
@@ -46,14 +54,17 @@ export function useScreenshotProgress(
 
       setEstimatedInterval((prev) => {
         // Use exponential moving average for stability
-        // Weight: 0.3 for new value, 0.7 for historical (reduces fluctuations)
-        const newInterval = prev === null ? measuredInterval : prev * 0.7 + measuredInterval * 0.3
+        // Weight: EMA_NEW_WEIGHT for new value, EMA_HISTORICAL_WEIGHT for historical
+        const newInterval =
+          prev === null
+            ? measuredInterval
+            : prev * EMA_HISTORICAL_WEIGHT + measuredInterval * EMA_NEW_WEIGHT
         // Reset countdown when interval changes
         setTimeRemaining(newInterval)
         return newInterval
       })
 
-      setSampleCount((prev) => Math.min(prev + 1, 10)) // Cap at 10 for "stable" indication
+      setSampleCount((prev) => Math.min(prev + 1, MAX_SAMPLE_COUNT))
     } else {
       // First screenshot - use server interval if available
       if (serverInterval) {
@@ -66,20 +77,20 @@ export function useScreenshotProgress(
     lastScreenshotTimeRef.current = screenshotTime
   }, [currentScreenshotId, screenshotData?.screenshot, screenshotData?.timestamp, serverInterval])
 
-  // Countdown timer - updates every 100ms for smooth animation
+  // Countdown timer - updates every PROGRESS_UPDATE_INTERVAL_MS for smooth animation
   useEffect(() => {
     if (!estimatedInterval || estimatedInterval <= 0) return
 
     const intervalId = setInterval(() => {
       setTimeRemaining((prev) => {
-        const next = prev - 0.1
+        const next = prev - PROGRESS_UPDATE_INTERVAL_MS / 1000
         // Don't go below 0, reset to estimated interval when it would go negative
         if (next <= 0) {
           return estimatedInterval
         }
         return next
       })
-    }, 100)
+    }, PROGRESS_UPDATE_INTERVAL_MS)
 
     return () => clearInterval(intervalId)
   }, [estimatedInterval])
@@ -93,8 +104,8 @@ export function useScreenshotProgress(
     )
   }, [estimatedInterval, timeRemaining])
 
-  // Consider stable after 3+ samples
-  const isStable = sampleCount >= 3
+  // Consider stable after STABILITY_THRESHOLD+ samples
+  const isStable = sampleCount >= STABILITY_THRESHOLD
 
   return {
     estimatedInterval,
