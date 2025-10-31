@@ -225,6 +225,81 @@ describe('MaaManager with Device Fixture', () => {
 
       fixture.stopPolling()
     })
+
+    it('should schedule delayed unlock', async () => {
+      fixture.startPolling()
+
+      // Lock the manager first
+      await manager.lock()
+      expect(manager.locked).toBe(true)
+
+      // Schedule unlock with 1 second delay for testing
+      const result = manager.scheduleUnlock({ seconds: 1 })
+
+      expect(result.scheduledFor).toBeDefined()
+      expect(result.delayDuration.total('milliseconds')).toBe(1000)
+      expect(manager.locked).toBe(true) // Should still be locked
+
+      // Wait for the unlock to execute
+      await new Promise((resolve) => setTimeout(resolve, 1200))
+
+      // Manager should now be unlocked
+      expect(manager.locked).toBe(false)
+
+      fixture.stopPolling()
+    })
+
+    it('should cancel scheduled unlock when locked again', async () => {
+      fixture.startPolling()
+
+      // Lock the manager first
+      await manager.lock()
+      expect(manager.locked).toBe(true)
+
+      // Schedule unlock with 2 second delay
+      manager.scheduleUnlock({ seconds: 2 })
+      expect(manager.locked).toBe(true)
+
+      // Wait a bit but not long enough for unlock
+      await new Promise((resolve) => setTimeout(resolve, 500))
+
+      // Lock again - this should cancel the scheduled unlock
+      await manager.lock()
+
+      // Wait past the original unlock time
+      await new Promise((resolve) => setTimeout(resolve, 2000))
+
+      // Manager should still be locked
+      expect(manager.locked).toBe(true)
+
+      fixture.stopPolling()
+    })
+
+    it('should cancel scheduled unlock explicitly', async () => {
+      fixture.startPolling()
+
+      await manager.lock()
+
+      // Schedule unlock
+      manager.scheduleUnlock({ seconds: 2 })
+
+      // Cancel it
+      const cancelled = manager.cancelScheduledUnlock()
+      expect(cancelled).toBe(true)
+
+      // Wait past the original unlock time
+      await new Promise((resolve) => setTimeout(resolve, 2500))
+
+      // Manager should still be locked
+      expect(manager.locked).toBe(true)
+
+      fixture.stopPolling()
+    })
+
+    it('should return false when cancelling with no scheduled unlock', () => {
+      const cancelled = manager.cancelScheduledUnlock()
+      expect(cancelled).toBe(false)
+    })
   })
 
   describe('Device Logs', () => {

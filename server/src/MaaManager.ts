@@ -255,6 +255,10 @@ export class MaaManager extends EventEmitter<MaaManagerEventMap> {
   private readonly MAX_TIMESTAMP_HISTORY = 10
   private estimatedIntervalMs = 1000
 
+  // Delayed unlock state
+  private unlockTimerId?: NodeJS.Timeout
+  private unlockScheduledFor?: Temporal.ZonedDateTime
+
   /**
    * @param device - Allowed Maa device identifier.
    * @param user - Authorized Maa user.
@@ -414,6 +418,14 @@ export class MaaManager extends EventEmitter<MaaManagerEventMap> {
   public async lock(): Promise<LockResult> {
     this.locked = true
 
+    // Cancel any pending delayed unlock
+    if (this.unlockTimerId) {
+      clearTimeout(this.unlockTimerId)
+      this.unlockTimerId = undefined
+      this.unlockScheduledFor = undefined
+      logger.info('Cancelled pending delayed unlock due to lock request')
+    }
+
     // Persist lock state to database (async, non-blocking)
     dbService.updateManagerLockState(this.device, true).catch((error) => {
       logger.error(`Failed to update lock state in database:`, error)
@@ -538,6 +550,55 @@ export class MaaManager extends EventEmitter<MaaManagerEventMap> {
     }
     this.emit('unlock', result)
     return result
+  }
+
+  /**
+   * Schedules a delayed unlock after the specified duration.
+   * Cancels any existing scheduled unlock.
+   * @param delay - Duration to wait before unlocking (default: 10 minutes)
+   * @returns Information about when the unlock will occur
+   */
+  public scheduleUnlock(delay: Temporal.DurationLike = { minutes: 10 }): {
+    scheduledFor: Temporal.ZonedDateTime
+    delayDuration: Temporal.Duration
+  } {
+    // Cancel existing unlock timer if any
+    if (this.unlockTimerId) {
+      clearTimeout(this.unlockTimerId)
+      logger.info('Cancelled previous delayed unlock')
+    }
+
+    const now = getNow()
+    const delayDuration = Temporal.Duration.from(delay)
+    const scheduledFor = now.add(delayDuration)
+    this.unlockScheduledFor = scheduledFor
+
+    const delayMs = delayDuration.total('milliseconds')
+    logger.info(`Scheduling unlock for ${scheduledFor.toString()} (in ${delayDuration.toString()})`)
+
+    this.unlockTimerId = setTimeout(async () => {
+      logger.info('Executing delayed unlock')
+      this.unlockTimerId = undefined
+      this.unlockScheduledFor = undefined
+      await this.unlock()
+    }, delayMs)
+
+    return { scheduledFor, delayDuration }
+  }
+
+  /**
+   * Cancels a scheduled delayed unlock if one exists.
+   * @returns true if a scheduled unlock was cancelled, false otherwise
+   */
+  public cancelScheduledUnlock(): boolean {
+    if (this.unlockTimerId) {
+      clearTimeout(this.unlockTimerId)
+      this.unlockTimerId = undefined
+      this.unlockScheduledFor = undefined
+      logger.info('Cancelled scheduled unlock')
+      return true
+    }
+    return false
   }
 
   public get state(): ManagerState {
