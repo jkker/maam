@@ -562,10 +562,18 @@ function TaskItem({
 }: TaskData & { className?: string }) {
   const displayStatus = status || stage
   const t = completedAt || startedAt || createdAt
+  const isFailed = status === 'FAILED'
+  const isCancelled = status === 'CANCELLED'
 
   return (
     <AccordionItem value={id} className={className}>
-      <AccordionTrigger className="flex items-center text-muted-foreground gap-2 text-xs">
+      <AccordionTrigger
+        className={cn(
+          'flex items-center text-muted-foreground gap-2 text-xs',
+          isFailed && 'bg-red-50 dark:bg-red-950/20 border-l-2 border-red-500',
+          isCancelled && 'opacity-60',
+        )}
+      >
         <TaskStatusBadge status={displayStatus} iconOnly />
         <h4 className="font-semibold text-primary text-sm mr-auto">{formatTaskType(type)}</h4>
         <time>{formatTime(t)}</time>
@@ -576,6 +584,13 @@ function TaskItem({
         )}
       </AccordionTrigger>
       <AccordionContent className="grid grid-cols-2 gap-2 text-xs px-2">
+        {isFailed && (
+          <div className="col-span-2 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800 rounded p-2 mb-2">
+            <span className="text-red-600 dark:text-red-400 font-medium">
+              ⚠️ This task failed or timed out after 24 hours
+            </span>
+          </div>
+        )}
         {params && (
           <div>
             <span className="text-gray-500 dark:text-gray-400">Params:</span>
