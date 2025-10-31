@@ -12,8 +12,7 @@ interface ScreenshotProgressState {
 }
 
 // Algorithm constants
-const EMA_HISTORICAL_WEIGHT = 0.7 // Weight for historical average in EMA
-const EMA_NEW_WEIGHT = 0.3 // Weight for new measurement in EMA
+const EMA_ALPHA = 0.3 // Smoothing factor for exponential moving average (0 = all history, 1 = all new)
 const MAX_SAMPLE_COUNT = 10 // Maximum number of samples to track for stability
 const STABILITY_THRESHOLD = 3 // Minimum samples needed for stable estimate
 const SCREENSHOT_ID_PREFIX_LENGTH = 20 // Length of screenshot hash prefix for ID
@@ -54,11 +53,9 @@ export function useScreenshotProgress(
 
       setEstimatedInterval((prev) => {
         // Use exponential moving average for stability
-        // Weight: EMA_NEW_WEIGHT for new value, EMA_HISTORICAL_WEIGHT for historical
+        // Formula: newEstimate = (1 - alpha) * oldEstimate + alpha * newMeasurement
         const newInterval =
-          prev === null
-            ? measuredInterval
-            : prev * EMA_HISTORICAL_WEIGHT + measuredInterval * EMA_NEW_WEIGHT
+          prev === null ? measuredInterval : (1 - EMA_ALPHA) * prev + EMA_ALPHA * measuredInterval
         // Reset countdown when interval changes
         setTimeRemaining(newInterval)
         return newInterval
