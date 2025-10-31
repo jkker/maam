@@ -59,9 +59,11 @@ import { ButtonGroup } from './components/ui/button-group'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './components/ui/card'
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from './components/ui/empty'
 import { Field, FieldLabel } from './components/ui/field'
+import { Progress } from './components/ui/progress'
 import { ScrollArea } from './components/ui/scroll-area'
 import { Skeleton } from './components/ui/skeleton'
 import { Spinner } from './components/ui/spinner'
+import { useScreenshotProgress } from './hooks/useScreenshotProgress'
 import { Footer, Header } from './Layout'
 import { queryClient, trpc } from './lib/trpc'
 import { cn, formatDuration, formatTaskType, formatTime } from './utils'
@@ -399,9 +401,21 @@ function QuickActions({ locked, connected }: { locked: boolean; connected: boole
 function ScreenshotViewer({ className, connected }: { className?: string; connected?: boolean }) {
   const { data: screenshotData, status } = useSubscription(trpc.screenshot.subscriptionOptions())
 
+  // Poll server for interval estimate (refetch every 10s to get latest estimate)
+  const { data: serverInterval } = useQuery({
+    ...trpc.screenshotInterval.queryOptions(),
+    refetchInterval: 10000,
+  })
+
+  const { estimatedInterval, timeRemaining, progress, isStable } = useScreenshotProgress(
+    screenshotData,
+    serverInterval,
+  )
+
+  const hasScreenshot = screenshotData?.connected && screenshotData?.screenshot
+
   return (
     <Card className={cn('aspect-video overflow-hidden flex flex-col py-0', className)}>
-      {/* Progress bar at top - only show after first estimate */}
       {/* Screenshot display area */}
       <div className="flex-1 grid place-items-center-safe">
         {!screenshotData ? (
@@ -419,7 +433,7 @@ function ScreenshotViewer({ className, connected }: { className?: string; connec
               </EmptyDescription>
             </Empty>
           )
-        ) : screenshotData.connected && screenshotData.screenshot ? (
+        ) : hasScreenshot ? (
           <img
             src={`data:image/png;base64,${screenshotData.screenshot}`}
             alt="Live screenshot"
@@ -436,6 +450,19 @@ function ScreenshotViewer({ className, connected }: { className?: string; connec
           </Empty>
         )}
       </div>
+
+      {/* Progress bar - only show when we have an estimate and a screenshot */}
+      {estimatedInterval && hasScreenshot && (
+        <div className="px-4 pb-3 pt-1 space-y-1">
+          <Progress value={progress} className="h-1" />
+          <div className="flex justify-between items-center text-xs text-muted-foreground">
+            <span>Next refresh in {Math.ceil(timeRemaining)}s</span>
+            <span>
+              Interval: ~{Math.round(estimatedInterval)}s{!isStable && ' (estimating...)'}
+            </span>
+          </div>
+        </div>
+      )}
     </Card>
   )
 }
