@@ -270,6 +270,9 @@ function QuickActions({ locked, connected }: { locked: boolean; connected: boole
   const [stagePopoverOpen, setStagePopoverOpen] = useState(false)
   const [selectedStage, setSelectedStage] = useState<string | null>(null)
 
+  // Query for running task
+  const { data: runningTask } = useQuery(trpc.runningTask.queryOptions())
+
   const start = useMutation(
     trpc.start.mutationOptions({
       onSuccess: () => queryClient.invalidateQueries(),
@@ -296,16 +299,23 @@ function QuickActions({ locked, connected }: { locked: boolean; connected: boole
     dispatch.mutate({ task: 'Settings-Stage1', params: selectedStage || undefined })
   }
 
+  // Determine button text based on running task
+  const startButtonText = start.isPending
+    ? 'Starting...'
+    : runningTask
+      ? `Running: ${formatTaskType(runningTask.type)}`
+      : 'Start'
+
   return (
     <div className="flex gap-2">
       <ButtonGroup className="flex-1">
         <Button
           onClick={() => start.mutate()}
-          disabled={locked || !connected || start.isPending}
+          disabled={locked || !connected || start.isPending || !!runningTask}
           className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-3 font-medium transition-all duration-200 bg-blue-600 hover:bg-blue-700 text-white shadow-lg shadow-blue-500/30 hover:shadow-xl hover:shadow-blue-500/40 hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
         >
           <Play className="w-4 h-4" />
-          <span>{start.isPending ? 'Starting...' : 'Start'}</span>
+          <span>{startButtonText}</span>
         </Button>
         <Button
           onClick={() => stop.mutate()}

@@ -65,6 +65,12 @@ export const router = t.router({
   toggleLock: t.procedure
     .input(z.boolean())
     .mutation(async ({ ctx: { manager }, input }) => (input ? manager.lock() : manager.unlock())),
+
+  /**
+   * Get the currently running task (if any)
+   */
+  runningTask: t.procedure.query(({ ctx: { manager } }) => manager.getRunningTask()),
+
   // Schedule management procedures
   schedules: t.procedure.query(({ ctx: { manager } }) => manager.schedules.map((s) => s.data)),
   addSchedule: t.procedure.input(scheduleSchema).mutation(({ ctx: { manager }, input }) => {
