@@ -860,26 +860,11 @@ export class MaaManager extends EventEmitter<MaaManagerEventMap> {
       if (task.stage === 'RUNNING' && task.startedAt) {
         const durationMs = now.since(task.startedAt).total('milliseconds')
         if (durationMs > this.TASK_TIMEOUT_MS) {
+          const durationHours = this.formatDurationHours(durationMs)
           logger.warn(
-            `Garbage collection: Task ${task.id} has been running for ${Math.round(durationMs / 1000 / 60 / 60)}h, marking as FAILED`,
+            `Garbage collection: Task ${task.id} has been running for ${durationHours}h, marking as FAILED`,
           )
-          task.stage = 'DONE'
-          task.status = 'FAILED'
-          task.completedAt = now
-          task.emit('DONE', task)
-          task.log('GC')
-
-          // Remove from queue if present
-          this.queue = this.queue.filter((t) => t.id !== task.id)
-          this.emit('taskCompleted', task.data)
-
-          // Update in database
-          if (!task.immediate) {
-            dbService.updateTask(task.data, this.device).catch((error) => {
-              logger.error(`Failed to update task ${task.id} in database:`, error)
-            })
-          }
-
+          this.markTaskAsStale(task, now, 'Task timed out after 24 hours (running)')
           staleCount++
         }
       }
@@ -888,26 +873,11 @@ export class MaaManager extends EventEmitter<MaaManagerEventMap> {
       if (task.stage === 'PENDING') {
         const durationMs = now.since(task.createdAt).total('milliseconds')
         if (durationMs > this.TASK_TIMEOUT_MS) {
+          const durationHours = this.formatDurationHours(durationMs)
           logger.warn(
-            `Garbage collection: Task ${task.id} has been pending for ${Math.round(durationMs / 1000 / 60 / 60)}h, marking as FAILED`,
+            `Garbage collection: Task ${task.id} has been pending for ${durationHours}h, marking as FAILED`,
           )
-          task.stage = 'DONE'
-          task.status = 'FAILED'
-          task.completedAt = now
-          task.emit('DONE', task)
-          task.log('GC')
-
-          // Remove from queue
-          this.queue = this.queue.filter((t) => t.id !== task.id)
-          this.emit('taskCompleted', task.data)
-
-          // Update in database
-          if (!task.immediate) {
-            dbService.updateTask(task.data, this.device).catch((error) => {
-              logger.error(`Failed to update task ${task.id} in database:`, error)
-            })
-          }
-
+          this.markTaskAsStale(task, now, 'Task timed out after 24 hours (pending)')
           staleCount++
         }
       }
@@ -917,6 +887,35 @@ export class MaaManager extends EventEmitter<MaaManagerEventMap> {
       logger.info(`Garbage collection: Marked ${staleCount} stale task(s) as FAILED`)
     } else {
       logger.debug('Garbage collection: No stale tasks found')
+    }
+  }
+
+  /**
+   * Helper to format duration in milliseconds to hours
+   */
+  private formatDurationHours(durationMs: number): number {
+    return Math.round(durationMs / 1000 / 60 / 60)
+  }
+
+  /**
+   * Helper to mark a task as stale and update its status
+   */
+  private markTaskAsStale(task: Task, now: Temporal.ZonedDateTime, reason: string) {
+    task.stage = 'DONE'
+    task.status = 'FAILED'
+    task.completedAt = now
+    task.emit('DONE', task)
+    task.log(reason)
+
+    // Remove from queue if present
+    this.queue = this.queue.filter((t) => t.id !== task.id)
+    this.emit('taskCompleted', task.data)
+
+    // Update in database
+    if (!task.immediate) {
+      dbService.updateTask(task.data, this.device).catch((error) => {
+        logger.error(`Failed to update task ${task.id} in database:`, error)
+      })
     }
   }
 

@@ -130,7 +130,9 @@ describe('Garbage Collection', () => {
     // Mock the task's createdAt to be 25 hours ago
     const now = Temporal.Now.instant().toZonedDateTimeISO('UTC')
     task.createdAt = now.subtract({ hours: 25 })
-    task.stage = 'RUNNING' // Force it to running for test
+    // Manually set stage to RUNNING to test GC skips immediate tasks
+    // This is acceptable in this test as we're testing the GC logic, not the task lifecycle
+    task.stage = 'RUNNING'
 
     // Run garbage collection
     manager.runGarbageCollection()
