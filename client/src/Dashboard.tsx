@@ -270,6 +270,9 @@ function QuickActions({ locked, connected }: { locked: boolean; connected: boole
   const [stagePopoverOpen, setStagePopoverOpen] = useState(false)
   const [selectedStage, setSelectedStage] = useState<string | null>(null)
 
+  // Query for running task
+  const { data: runningTask } = useQuery(trpc.runningTask.queryOptions())
+
   const start = useMutation(
     trpc.start.mutationOptions({
       onSuccess: () => queryClient.invalidateQueries(),
@@ -296,16 +299,23 @@ function QuickActions({ locked, connected }: { locked: boolean; connected: boole
     dispatch.mutate({ task: 'Settings-Stage1', params: selectedStage || undefined })
   }
 
+  // Determine button text based on running task
+  const startButtonText = start.isPending
+    ? 'Starting...'
+    : runningTask
+      ? `Running: ${formatTaskType(runningTask.type)}`
+      : 'Start'
+
   return (
     <div className="flex gap-2">
       <ButtonGroup className="flex-1">
         <Button
           onClick={() => start.mutate()}
-          disabled={locked || !connected || start.isPending}
+          disabled={locked || !connected || start.isPending || !!runningTask}
           className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-3 font-medium transition-all duration-200 bg-blue-600 hover:bg-blue-700 text-white shadow-lg shadow-blue-500/30 hover:shadow-xl hover:shadow-blue-500/40 hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
         >
           <Play className="w-4 h-4" />
-          <span>{start.isPending ? 'Starting...' : 'Start'}</span>
+          <span>{startButtonText}</span>
         </Button>
         <Button
           onClick={() => stop.mutate()}
@@ -552,10 +562,18 @@ function TaskItem({
 }: TaskData & { className?: string }) {
   const displayStatus = status || stage
   const t = completedAt || startedAt || createdAt
+  const isFailed = status === 'FAILED'
+  const isCancelled = status === 'CANCELLED'
 
   return (
     <AccordionItem value={id} className={className}>
-      <AccordionTrigger className="flex items-center text-muted-foreground gap-2 text-xs">
+      <AccordionTrigger
+        className={cn(
+          'flex items-center text-muted-foreground gap-2 text-xs',
+          isFailed && 'bg-red-50 dark:bg-red-950/20 border-l-2 border-red-500',
+          isCancelled && 'opacity-60',
+        )}
+      >
         <TaskStatusBadge status={displayStatus} iconOnly />
         <h4 className="font-semibold text-primary text-sm mr-auto">{formatTaskType(type)}</h4>
         <time>{formatTime(t)}</time>
@@ -566,6 +584,13 @@ function TaskItem({
         )}
       </AccordionTrigger>
       <AccordionContent className="grid grid-cols-2 gap-2 text-xs px-2">
+        {isFailed && (
+          <div className="col-span-2 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800 rounded p-2 mb-2">
+            <span className="text-red-600 dark:text-red-400 font-medium">
+              ⚠️ This task failed or timed out after 24 hours
+            </span>
+          </div>
+        )}
         {params && (
           <div>
             <span className="text-gray-500 dark:text-gray-400">Params:</span>

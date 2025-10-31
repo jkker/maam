@@ -259,6 +259,11 @@ export class MaaManager extends EventEmitter<MaaManagerEventMap> {
   private unlockTimerId?: NodeJS.Timeout
   private unlockScheduledFor?: Temporal.ZonedDateTime
 
+  // Garbage collection state
+  private gcIntervalId?: NodeJS.Timeout
+  private readonly TASK_TIMEOUT_MS = 24 * 60 * 60 * 1000 // 24 hours
+  private readonly GC_INTERVAL_MS = 60 * 60 * 1000 // Run GC every hour
+
   /**
    * @param device - Allowed Maa device identifier.
    * @param user - Authorized Maa user.
@@ -286,6 +291,9 @@ export class MaaManager extends EventEmitter<MaaManagerEventMap> {
 
     // Initialize manager state in database
     void this.initializeDatabase()
+
+    // Start garbage collection for stale tasks
+    this.startGarbageCollection()
   }
 
   /**
@@ -337,6 +345,7 @@ export class MaaManager extends EventEmitter<MaaManagerEventMap> {
 
   /**
    * Creates a new task instance and appends it to the dispatch queue.
+   * Prevents duplicate tasks from being queued.
    * @param type - Maa task type to create.
    * @param params - Optional Maa task payload.
    * @returns The newly created {@link Task}.
@@ -344,6 +353,24 @@ export class MaaManager extends EventEmitter<MaaManagerEventMap> {
   create(type: TaskType, params?: string) {
     if (this.locked && !Task.isImmediate(type))
       throw new Error('Manager locked, cannot dispatch queued tasks')
+
+    // Check for duplicate tasks in queue (prevent queuing the same task multiple times)
+    const duplicateInQueue = this.queue.find(
+      (t) => t.type === type && t.params === params && t.stage === 'PENDING',
+    )
+    if (duplicateInQueue && !Task.isImmediate(type)) {
+      logger.warn(`Duplicate task ${type} already in queue, returning existing task`)
+      return duplicateInQueue
+    }
+
+    // Check for running tasks of the same type (except immediate tasks)
+    const runningDuplicate = Array.from(this.tasks.values()).find(
+      (t) => t.type === type && t.params === params && t.stage === 'RUNNING' && !t.immediate,
+    )
+    if (runningDuplicate) {
+      logger.warn(`Task ${type} is already running, returning existing task`)
+      return runningDuplicate
+    }
 
     const now = Temporal.Now.instant().toZonedDateTimeISO(this.tz)
 
@@ -611,6 +638,17 @@ export class MaaManager extends EventEmitter<MaaManagerEventMap> {
     }
   }
 
+  /**
+   * Gets the currently running task (if any)
+   * @returns The running task data or undefined
+   */
+  public getRunningTask(): TaskData | undefined {
+    const runningTask = Array.from(this.tasks.values()).find(
+      (t) => t.stage === 'RUNNING' && !t.immediate,
+    )
+    return runningTask?.data
+  }
+
   public deviceLog(text: string) {
     // replace "\n" with actual newlines and trim whitespace
     text = text.replace(/\\n/g, '\n')
@@ -777,6 +815,110 @@ export class MaaManager extends EventEmitter<MaaManagerEventMap> {
     this.screenshotIntervalId = undefined
   }
 
+  /**
+   * Starts garbage collection for stale tasks
+   * Runs periodically to mark tasks that haven't been reported in >24 hours as FAILED
+   */
+  private startGarbageCollection() {
+    logger.info(`Starting garbage collection at ${this.GC_INTERVAL_MS / 1000}s interval`)
+
+    // Run GC immediately on startup
+    this.runGarbageCollection()
+
+    // Then run periodically
+    this.gcIntervalId = setInterval(() => {
+      this.runGarbageCollection()
+    }, this.GC_INTERVAL_MS)
+  }
+
+  /**
+   * Stops garbage collection interval
+   */
+  private stopGarbageCollection() {
+    if (!this.gcIntervalId) return
+
+    logger.info('Stopping garbage collection')
+    clearInterval(this.gcIntervalId)
+    this.gcIntervalId = undefined
+  }
+
+  /**
+   * Performs garbage collection on stale tasks
+   * Marks tasks that have been running for >24 hours as FAILED
+   * Public for testing purposes
+   */
+  public runGarbageCollection() {
+    const now = getNow()
+    const tasks = Array.from(this.tasks.values())
+    let staleCount = 0
+
+    for (const task of tasks) {
+      // Skip immediate tasks and already completed tasks
+      if (task.immediate || task.stage === 'DONE') continue
+
+      // Check if task has been running for too long
+      if (task.stage === 'RUNNING' && task.startedAt) {
+        const durationMs = now.since(task.startedAt).total('milliseconds')
+        if (durationMs > this.TASK_TIMEOUT_MS) {
+          const durationHours = this.formatDurationHours(durationMs)
+          logger.warn(
+            `Garbage collection: Task ${task.id} has been running for ${durationHours}h, marking as FAILED`,
+          )
+          this.markTaskAsStale(task, now, 'Task timed out after 24 hours (running)')
+          staleCount++
+        }
+      }
+
+      // Check if task has been pending for too long (unlikely but possible)
+      if (task.stage === 'PENDING') {
+        const durationMs = now.since(task.createdAt).total('milliseconds')
+        if (durationMs > this.TASK_TIMEOUT_MS) {
+          const durationHours = this.formatDurationHours(durationMs)
+          logger.warn(
+            `Garbage collection: Task ${task.id} has been pending for ${durationHours}h, marking as FAILED`,
+          )
+          this.markTaskAsStale(task, now, 'Task timed out after 24 hours (pending)')
+          staleCount++
+        }
+      }
+    }
+
+    if (staleCount > 0) {
+      logger.info(`Garbage collection: Marked ${staleCount} stale task(s) as FAILED`)
+    } else {
+      logger.debug('Garbage collection: No stale tasks found')
+    }
+  }
+
+  /**
+   * Helper to format duration in milliseconds to hours
+   */
+  private formatDurationHours(durationMs: number): number {
+    return Math.round(durationMs / 1000 / 60 / 60)
+  }
+
+  /**
+   * Helper to mark a task as stale and update its status
+   */
+  private markTaskAsStale(task: Task, now: Temporal.ZonedDateTime, reason: string) {
+    task.stage = 'DONE'
+    task.status = 'FAILED'
+    task.completedAt = now
+    task.emit('DONE', task)
+    task.log(reason)
+
+    // Remove from queue if present
+    this.queue = this.queue.filter((t) => t.id !== task.id)
+    this.emit('taskCompleted', task.data)
+
+    // Update in database
+    if (!task.immediate) {
+      dbService.updateTask(task.data, this.device).catch((error) => {
+        logger.error(`Failed to update task ${task.id} in database:`, error)
+      })
+    }
+  }
+
   public async *listen<K extends MaaManagerEventKey>(
     event: K,
     options?: Parameters<typeof EventEmitter.on>[2],
@@ -786,5 +928,22 @@ export class MaaManager extends EventEmitter<MaaManagerEventMap> {
       yield arg as MaaManagerEventMap[K][0]
     }
     logger.debug(`Client unsubscribed from ${event}`)
+  }
+
+  /**
+   * Cleanup method to stop all intervals and timers
+   * Should be called when manager is being destroyed
+   */
+  public cleanup() {
+    this.stopScreenshotPolling()
+    this.stopGarbageCollection()
+    this.scheduler.stop()
+
+    if (this.unlockTimerId) {
+      clearTimeout(this.unlockTimerId)
+      this.unlockTimerId = undefined
+    }
+
+    logger.info(`Manager ${this.device} cleaned up`)
   }
 }
