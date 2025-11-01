@@ -22,27 +22,10 @@ interface VariablesContext {
 
 export const manager = new MaaManager('bdc57941058a47e6bf56f2a993c87af3', 'user')
 
-/**
- * Initialize tRPC with SSE support for subscriptions
- */
-/**
- * Initializes a tRPC instance with custom context and configuration options.
- *
- * @template VariablesContext - The type of the context available to tRPC procedures.
- *
- * @param sse - Configuration for Server-Sent Events (SSE).
- * @param sse.ping.enabled - Enables periodic ping messages to keep SSE connections alive.
- * @param sse.ping.intervalMs - Interval in milliseconds between ping messages.
- *
- * @remarks
- * - The `context<VariablesContext>()` method sets the type for the context object available in all tRPC procedures.
- * - The `sse` option configures SSE support, allowing the server to send keep-alive pings to clients.
- * - See {@link https://trpc.io/docs/server-sent-events} for more details on SSE configuration in tRPC.
- */
 const t = initTRPC.context<VariablesContext>().create({
   sse: {
     ping: {
-      enabled: true,
+      enabled: false,
     },
   },
 })
