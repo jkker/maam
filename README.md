@@ -36,6 +36,17 @@ MAA Manager provides a web-based control interface for MAA automation clients, e
 - 🎨 **Color-coded Events**: Visual distinction between tasks, official events, and daily separators
 - ⏰ **Flexible Timing**: Minute-level precision with cron-based recurrence
 
+### Intelligent Task-Log Assignment
+
+- 🧩 **Optimal Matching**: Hungarian Algorithm (Munkres) for assigning tasks to execution logs
+- ⏱️ **Multi-criteria Cost Function**: Time proximity and duration similarity
+- 🌐 **Timezone-aware**: Handles UTC tasks vs Asia/Shanghai logs automatically
+- ⚖️ **Unbalanced Support**: Correctly handles cases where tasks ≠ logs
+- 🎛️ **Configurable**: Adjustable weights for time vs duration matching
+- 📊 **O(n³) Complexity**: Efficient assignment even with hundreds of tasks/logs
+
+See [Assignment Solver Documentation](server/src/lib/ASSIGNMENT.md) for detailed usage and examples.
+
 ## 🚀 Quick Start
 
 ### Prerequisites
