@@ -251,6 +251,9 @@ importers:
       hono:
         specifier: ^4.10.3
         version: 4.10.3
+      munkres:
+        specifier: ^2.0.4
+        version: 2.0.4
       rotating-file-stream:
         specifier: ^3.2.7
         version: 3.2.7
@@ -6325,6 +6328,13 @@ packages:
         integrity: sha512-VNTrAak/KhO2i8dqqnqnAHOa3cYBwXEZe9h+D5h/1ZqFSTEFHdM65lR7RoIqq3tBBYavsOXV84NoHXZ0AkPyqQ==,
       }
 
+  munkres@2.0.4:
+    resolution:
+      {
+        integrity: sha512-kPwl02Z9zJAN3Ci3ZbXqON06Qkwlp9kLnGbYib61guxcZL5upciEJvib8JBqfbpLI1Q6DBxGmaXqchNm8hLaPw==,
+      }
+    engines: { node: '>= 18' }
+
   mute-stream@2.0.0:
     resolution:
       {
@@ -12185,6 +12195,8 @@ snapshots:
     optional: true
 
   muggle-string@0.4.1: {}
+
+  munkres@2.0.4: {}
 
   mute-stream@2.0.0:
     optional: true

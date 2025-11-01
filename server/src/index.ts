@@ -208,5 +208,6 @@ else app.use(serveStatic({ root: 'dist/public', index: 'index.html' }))
 if (DEBUG) app.use(loggerMiddleware())
 
 export * from './lib/schema'
+export * from './lib/assignment'
 export default app
 export type { ScheduleData, TaskData }
