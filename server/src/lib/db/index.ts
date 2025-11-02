@@ -4,8 +4,10 @@ import { fileURLToPath } from 'node:url'
 
 import Database from 'better-sqlite3'
 import { drizzle } from 'drizzle-orm/better-sqlite3'
+import { Temporal } from 'temporal-polyfill'
 
 import * as schema from './schema'
+import { ARKNIGHTS_TIME_ZONE, DEFAULT_DEVICE } from '../../const'
 import { logger } from '../logger'
 
 const __filename = fileURLToPath(import.meta.url)
@@ -74,6 +76,10 @@ export function closeDatabase() {
 export function initDatabase() {
   getDatabase()
 
+  const isNewDatabase = !sqlite!
+    .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='schedules'")
+    .get()
+
   sqlite!.exec(`
     CREATE TABLE IF NOT EXISTS tasks (
       id TEXT PRIMARY KEY,
@@ -128,4 +134,49 @@ export function initDatabase() {
   `)
 
   logger.info('Database initialized')
+
+  // Seed default schedules for new databases
+  if (isNewDatabase) {
+    seedDefaultSchedules()
+  }
+}
+
+/**
+ * Seed default schedules into the database
+ * Called only when initializing a new database
+ */
+function seedDefaultSchedules() {
+  // Check if schedules already exist for the default device
+  const existingSchedules = sqlite!
+    .prepare('SELECT COUNT(*) as count FROM schedules WHERE device = ?')
+    .get(DEFAULT_DEVICE) as { count: number }
+
+  if (existingSchedules && existingSchedules.count > 0) {
+    logger.info('Default schedules already exist, skipping seeding')
+    return
+  }
+
+  const defaultSchedules = [
+    { type: 'LinkStart', hour: 4, timezone: ARKNIGHTS_TIME_ZONE },
+    { type: 'LinkStart', hour: 12, timezone: ARKNIGHTS_TIME_ZONE },
+    { type: 'LinkStart', hour: 20, timezone: ARKNIGHTS_TIME_ZONE },
+  ]
+
+  const timezone = Temporal.Now.timeZoneId()
+  const insertSchedule = sqlite!.prepare(`
+    INSERT INTO schedules (id, type, hour, minute, timezone, run_count, device)
+    VALUES (?, ?, ?, ?, ?, 0, ?)
+  `)
+
+  for (const schedule of defaultSchedules) {
+    const id = `${schedule.type}|${schedule.hour}@${ARKNIGHTS_TIME_ZONE}`
+    try {
+      insertSchedule.run(id, schedule.type, schedule.hour, 0, timezone, DEFAULT_DEVICE)
+      logger.info(`Seeded default schedule: ${id}`)
+    } catch (error) {
+      logger.warn(`Failed to seed schedule ${id}:`, error)
+    }
+  }
+
+  logger.info('Default schedules seeded')
 }

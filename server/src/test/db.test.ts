@@ -2,6 +2,7 @@ import fs from 'node:fs'
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 
+import { DEFAULT_DEVICE } from '../const'
 import { initDatabase, closeDatabase } from '../lib/db'
 import { dbService } from '../lib/db/service'
 
@@ -249,6 +250,36 @@ describe('Database Service', () => {
       expect(logs).toHaveLength(10)
       // Should get most recent logs
       expect(logs[0].title).toBe('Log 99')
+    })
+  })
+
+  describe('Database Initialization', () => {
+    it('should seed default schedules on new database', async () => {
+      // Get schedules for the default device
+      const schedules = await dbService.getSchedulesByDevice(DEFAULT_DEVICE)
+
+      // Should have 3 default schedules
+      expect(schedules.length).toBeGreaterThanOrEqual(3)
+
+      // Verify the seeded schedules
+      const schedule3am = schedules.find((s) => s.id === 'LinkStart|3:0')
+      const schedule11am = schedules.find((s) => s.id === 'LinkStart|11:0')
+      const schedule7pm = schedules.find((s) => s.id === 'LinkStart|19:0')
+
+      expect(schedule3am).toBeDefined()
+      expect(schedule3am?.type).toBe('LinkStart')
+      expect(schedule3am?.hour).toBe(3)
+      expect(schedule3am?.minute).toBe(0)
+
+      expect(schedule11am).toBeDefined()
+      expect(schedule11am?.type).toBe('LinkStart')
+      expect(schedule11am?.hour).toBe(11)
+      expect(schedule11am?.minute).toBe(0)
+
+      expect(schedule7pm).toBeDefined()
+      expect(schedule7pm?.type).toBe('LinkStart')
+      expect(schedule7pm?.hour).toBe(19)
+      expect(schedule7pm?.minute).toBe(0)
     })
   })
 })

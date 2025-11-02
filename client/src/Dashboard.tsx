@@ -1,6 +1,6 @@
 import type { TaskData } from '@maam/server'
 
-import { TASK_TYPE } from '@maam/server/schema'
+import { TASK_TYPE } from '@maam/server/const'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { useSubscription } from '@trpc/tanstack-react-query'
 

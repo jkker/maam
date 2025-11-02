@@ -13,8 +13,7 @@
     "format": "prettier --check .",
     "format:fix": "prettier --write .",
     "typecheck": "pnpm -r typecheck",
-    "test": "vitest",
-    "test:e2e": "pnpm -F @maam/server test:e2e",
+    "test": "vitest --run",
     "test:watch": "vitest --watch",
     "ci": "pnpm build && pnpm lint && pnpm typecheck && pnpm test",
     "maam": "git pull && pnpm install --frozen-lockfile && pnpm build && pnpm start"
@@ -52,7 +51,7 @@
   },
   "lint-staged": {
     "*.{js,ts,jsx,tsx}": [
-      "bash -c 'tsc --noEmit'",
+      "bash -c 'tsc -b --noEmit'",
       "eslint --fix",
       "prettier --write"
     ],

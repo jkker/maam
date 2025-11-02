@@ -1,7 +1,7 @@
 import type { ScheduleData, TaskType } from '@maam/server'
 import type { CalendarConfig, CalendarEvent } from '@schedule-x/calendar'
 
-import { TASK_TYPE, ARKNIGHTS_TIME_ZONE } from '@maam/server/schema'
+import { TASK_TYPE, ARKNIGHTS_TIME_ZONE } from '@maam/server/const'
 import { createViewDay, createViewWeek, createViewList } from '@schedule-x/calendar'
 import { createCurrentTimePlugin } from '@schedule-x/current-time'
 

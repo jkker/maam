@@ -2,18 +2,10 @@ import { EventEmitter } from 'node:events'
 
 import { CronJob, Task as ScheduledTask, ToadScheduler } from 'toad-scheduler'
 
+import { IMMEDIATE_TASK, T } from './const'
 import { dbService } from './lib/db/service'
 import { DEBUG, logger } from './lib/logger'
-
-import {
-  IMMEDIATE_TASK,
-  T,
-  type ImmediateTask,
-  type Schedule,
-  type TaskStage,
-  type TaskType,
-} from './lib/schema'
-
+import { type ImmediateTask, type Schedule, type TaskStage, type TaskType } from './lib/schema'
 import { getNow } from './lib/temporal'
 
 /**

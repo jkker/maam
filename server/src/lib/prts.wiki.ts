@@ -1,6 +1,6 @@
 import * as cheerio from 'cheerio'
 
-import { ARKNIGHTS_TIME_ZONE } from './schema'
+import { ARKNIGHTS_TIME_ZONE } from '../const'
 import { getNow } from './temporal'
 
 const baseURL = 'https://prts.wiki'
