@@ -104,8 +104,13 @@ export const app = new Hono<{ Variables: VariablesContext }>()
   .get('/screenshot-stream', (c) => {
     logger.info('New MJPEG stream connection')
 
+    let streamController: ReadableStreamDefaultController<Uint8Array> | null = null
+
     const stream = new ReadableStream({
       start(controller) {
+        // Store reference for cleanup
+        streamController = controller
+
         // Register this controller with the manager
         manager.addStreamController(controller)
 
@@ -115,8 +120,11 @@ export const app = new Hono<{ Variables: VariablesContext }>()
       },
       cancel() {
         logger.info('MJPEG stream connection closed')
-        // Note: We can't easily get the controller here, but it will be cleaned up
-        // when write attempts fail
+        // Properly clean up the controller
+        if (streamController) {
+          manager.removeStreamController(streamController)
+          streamController = null
+        }
       },
     })
 

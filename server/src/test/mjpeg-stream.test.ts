@@ -1,9 +1,11 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import fs from 'node:fs'
+
+import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+
 import { MaaManager } from '../MaaManager'
 import { MaaDeviceFixture, createTestManager } from './fixture'
-import { initDatabase, closeDatabase } from '../lib/db'
 import { app } from '../index'
+import { initDatabase, closeDatabase } from '../lib/db'
 
 describe('MJPEG Screenshot Stream', () => {
   const testDbPath = `/tmp/test-maam-mjpeg-${Date.now()}.db`
