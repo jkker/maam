@@ -394,8 +394,14 @@ describe('MaaManager with Device Fixture', () => {
   })
 
   describe('Screenshot Polling', () => {
-    it('should emit screenshot events', async () => {
+    it('should emit screenshot events when polling is active', async () => {
       fixture.startPolling()
+
+      // Add a mock stream controller to start polling
+      const mockController = {
+        enqueue: () => {},
+      } as ReadableStreamDefaultController<Uint8Array>
+      manager.addStreamController(mockController)
 
       const screenshotPromise = new Promise((resolve) => {
         manager.once('screenshot', (snapshot) => {
@@ -413,6 +419,8 @@ describe('MaaManager with Device Fixture', () => {
 
       expect(snapshot).toBeDefined()
 
+      // Clean up
+      manager.removeStreamController(mockController)
       fixture.stopPolling()
     })
   })
