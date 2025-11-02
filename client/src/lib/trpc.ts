@@ -24,3 +24,5 @@ export const trpc = createTRPCOptionsProxy<TRPCRouter>({
   client: trpcClient,
   queryClient,
 })
+
+export const invalidateQueries = queryClient.invalidateQueries.bind(queryClient)

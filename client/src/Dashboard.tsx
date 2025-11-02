@@ -1,7 +1,7 @@
 import type { TaskData } from '@maam/server'
 
 import { TASK_TYPE } from '@maam/server/schema'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery } from '@tanstack/react-query'
 import { useSubscription } from '@trpc/tanstack-react-query'
 
 import {
@@ -65,7 +65,7 @@ import { Skeleton } from './components/ui/skeleton'
 import { Spinner } from './components/ui/spinner'
 import { useScreenshotProgress } from './hooks/useScreenshotProgress'
 import { Footer, Header } from './Layout'
-import { queryClient, trpc } from './lib/trpc'
+import { invalidateQueries, trpc } from './lib/trpc'
 import { cn, formatDuration, formatTaskType, formatTime } from './utils'
 
 // Stage selection data with availability by weekday
@@ -101,27 +101,25 @@ const STAGE_OPTIONS: StageOption[] = [
 ]
 
 export default function Dashboard() {
-  const heartbeat = useQuery(trpc.heartbeat.queryOptions())
-  const deviceConnected = heartbeat.data === true
-
-  const { data: { tasks = [] } = {} } = useSubscription({
-    ...trpc.state.subscriptionOptions(),
-  })
-  const { data: isLocked = false } = useQuery(trpc.isLocked.queryOptions())
+  const {
+    data: locked = false,
+    isSuccess,
+    isError,
+    isPending,
+    isFetching,
+  } = useQuery(trpc.locked.queryOptions())
 
   return (
     <>
       <Header>
         <ConnectivityStatusIndicator
-          isError={heartbeat.isError}
-          isPending={heartbeat.isPending}
-          isFetching={heartbeat.isFetching}
-          refetch={heartbeat.refetch}
+          isError={isError}
+          isPending={isPending}
+          isFetching={isFetching}
         />
       </Header>
       <main className="flex-1 container mx-auto p-4 max-w-7xl grid grid-cols-1 md:grid-cols-6 lg:grid-cols-12 gap-4 auto-rows-min">
-        {/* Lock Warning - Full Width */}
-        {isLocked && (
+        {locked && (
           <Alert className="col-span-full" variant="warning">
             <LockIcon />
             <AlertTitle>Manager Locked</AlertTitle>
@@ -129,38 +127,16 @@ export default function Dashboard() {
           </Alert>
         )}
 
-        {/* Device Connection Warning */}
-        {!deviceConnected && !heartbeat.isPending && (
-          <Alert className="col-span-full" variant="destructive">
-            <AlertTitle>Device Offline</AlertTitle>
-            <AlertDescription>
-              MAA device is not responding to heartbeat. Some features may be unavailable.{' '}
-              <Button variant="link" className="p-0 h-auto" onClick={() => heartbeat.refetch()}>
-                Retry
-              </Button>
-            </AlertDescription>
-          </Alert>
-        )}
+        <ScreenshotViewer className="col-span-full" />
 
-        {/* Screenshot - Left side on desktop, full width on mobile/tablet */}
-        <ScreenshotViewer className="col-span-full" connected={deviceConnected} />
-
-        {/* Quick Actions - Top right on desktop, full width on smaller screens */}
         <div className="col-span-full gap-4 grid grid-cols-1 md:grid-cols-2">
-          <QuickActions locked={isLocked} connected={deviceConnected} />
-          <LockToggle isLocked={isLocked} connected={deviceConnected} />
+          <QuickActions locked={locked} connected={isSuccess} />
+          <LockToggle locked={locked} connected={isSuccess} />
         </div>
 
-        {/* Task Manager - Left column on desktop */}
-        <TaskManager tasks={tasks} className="col-span-full lg:col-span-6" />
-
-        {/* Log Viewer - Right column on desktop */}
+        <TaskManager className="col-span-full lg:col-span-6" />
         <LogViewer className="col-span-full lg:col-span-6" />
-
-        {/* Schedule Manager - Full width (calendar needs horizontal space) */}
-        <ScheduleManager className="col-span-full" connected={deviceConnected} />
-
-        {/* Config Viewer - Full width */}
+        <ScheduleManager className="col-span-full" connected={isSuccess} />
         <ConfigViewer className="col-span-full" />
       </main>
       <Footer />
@@ -172,12 +148,10 @@ function ConnectivityStatusIndicator({
   isError,
   isPending,
   isFetching,
-  refetch,
 }: {
   isError: boolean
   isFetching: boolean
   isPending: boolean
-  refetch: () => Promise<unknown>
 }) {
   const [status, fg, bg] = isFetching
     ? isPending
@@ -188,11 +162,7 @@ function ConnectivityStatusIndicator({
       : ['Online', 'bg-green-400', 'bg-green-500']
 
   return (
-    <Badge
-      onClick={() => refetch()}
-      variant="secondary"
-      className="px-3 py-1.5 flex gap-1.5 transition-all"
-    >
+    <Badge variant="secondary" className="px-3 py-1.5 flex gap-1.5 transition-all">
       <span className="relative flex h-2 w-2">
         <span
           className={cn(
@@ -264,58 +234,52 @@ function ConfigViewer({
 }
 
 const { dayOfWeek } = Temporal.Now.zonedDateTimeISO('Asia/Shanghai')
+const stageOptionsList = STAGE_OPTIONS.map(({ id, label, weekdays }) => {
+  const text = `${id} - ${label}`
+  if (!weekdays?.length) return { value: id, label: text }
+  const weekdaysList = weekdays.map((d) => {
+    const t = ['一', '二', '三', '四', '五', '六', '日'][d - 1]
+    return d === dayOfWeek ? <b key={d}>{t}</b> : t
+  })
 
+  return {
+    value: id,
+    label: (
+      <div className="flex items-center justify-between gap-2">
+        {text}
+        <ul className="ml-auto inline-flex text-muted-foreground">{weekdaysList}</ul>
+      </div>
+    ),
+    disabled: weekdays && !weekdays.includes(dayOfWeek),
+  }
+})
 function QuickActions({ locked, connected }: { locked: boolean; connected: boolean }) {
-  const queryClient = useQueryClient()
   const [stagePopoverOpen, setStagePopoverOpen] = useState(false)
   const [selectedStage, setSelectedStage] = useState<string | null>(null)
 
-  // Query for running task
-  const { data: runningTask } = useQuery(trpc.runningTask.queryOptions())
-
-  const start = useMutation(
-    trpc.start.mutationOptions({
-      onSuccess: () => queryClient.invalidateQueries(),
-    }),
-  )
-
-  const stop = useMutation(
-    trpc.stop.mutationOptions({
-      onSuccess: () => queryClient.invalidateQueries(),
-    }),
-  )
+  const start = useMutation(trpc.start.mutationOptions({ onSuccess: () => invalidateQueries() }))
+  const stop = useMutation(trpc.stop.mutationOptions({ onSuccess: () => invalidateQueries() }))
 
   const dispatch = useMutation(
     trpc.dispatch.mutationOptions({
       onSuccess: () => {
-        void queryClient.invalidateQueries()
+        void invalidateQueries()
         setStagePopoverOpen(false)
         setSelectedStage(null)
       },
     }),
   )
 
-  const handleStageDispatch = () => {
-    dispatch.mutate({ task: 'Settings-Stage1', params: selectedStage || undefined })
-  }
-
-  // Determine button text based on running task
-  const startButtonText = start.isPending
-    ? 'Starting...'
-    : runningTask
-      ? `Running: ${formatTaskType(runningTask.type)}`
-      : 'Start'
-
   return (
     <div className="flex gap-2">
       <ButtonGroup className="flex-1">
         <Button
           onClick={() => start.mutate()}
-          disabled={locked || !connected || start.isPending || !!runningTask}
+          disabled={locked || !connected || start.isPending}
           className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-3 font-medium transition-all duration-200 bg-blue-600 hover:bg-blue-700 text-white shadow-lg shadow-blue-500/30 hover:shadow-xl hover:shadow-blue-500/40 hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
         >
           <Play className="w-4 h-4" />
-          <span>{startButtonText}</span>
+          {start.isPending ? 'Starting...' : 'Start'}
         </Button>
         <Button
           onClick={() => stop.mutate()}
@@ -356,34 +320,7 @@ function QuickActions({ locked, connected }: { locked: boolean; connected: boole
         </PopoverTrigger>
         <PopoverContent className="w-80 space-y-4">
           <Autocomplete
-            options={STAGE_OPTIONS.map(({ id, label, weekdays }) => {
-              const text = `${id} - ${label}`
-              if (!weekdays?.length) return { value: id, label: text }
-              return {
-                value: id,
-                label: (
-                  <div className="flex items-center justify-between gap-2">
-                    {text}
-                    {
-                      <ul className="ml-auto inline-flex text-muted-foreground">
-                        {weekdays.map((d) => {
-                          const t = ['一', '二', '三', '四', '五', '六', '日'][d - 1]
-                          if (d === dayOfWeek) {
-                            return (
-                              <span key={d} className="font-bold">
-                                {t}
-                              </span>
-                            )
-                          }
-                          return <span key={d}>{t}</span>
-                        })}
-                      </ul>
-                    }
-                  </div>
-                ),
-                disabled: weekdays && !weekdays.includes(dayOfWeek),
-              }
-            })}
+            options={stageOptionsList}
             value={selectedStage}
             onChange={setSelectedStage}
             placeholder="Search stages..."
@@ -392,7 +329,9 @@ function QuickActions({ locked, connected }: { locked: boolean; connected: boole
           />
           <div className="flex gap-2">
             <Button
-              onClick={handleStageDispatch}
+              onClick={() => {
+                dispatch.mutate({ task: 'Settings-Stage1', params: selectedStage || undefined })
+              }}
               disabled={!selectedStage || dispatch.isPending}
               className="flex-1"
             >
@@ -408,88 +347,60 @@ function QuickActions({ locked, connected }: { locked: boolean; connected: boole
   )
 }
 
-// Configuration for screenshot interval polling
-const SERVER_INTERVAL_REFETCH_MS = 10000 // Poll server for interval estimate every 10s
-
-function ScreenshotViewer({ className, connected }: { className?: string; connected?: boolean }) {
-  const { data: screenshotData, status } = useSubscription(trpc.screenshot.subscriptionOptions())
-
-  // Poll server for interval estimate
-  const { data: serverInterval } = useQuery({
-    ...trpc.screenshotInterval.queryOptions(),
-    refetchInterval: SERVER_INTERVAL_REFETCH_MS,
-  })
-
-  const { estimatedInterval, timeRemaining, progress, isStable } = useScreenshotProgress(
-    screenshotData,
-    serverInterval,
+function ScreenshotViewer({ className }: { className?: string }) {
+  const { data: { screenshot, timestamp, interval } = {}, status } = useSubscription(
+    trpc.screenshot.subscriptionOptions(),
   )
 
-  const hasScreenshot = screenshotData?.connected && screenshotData?.screenshot
-
   return (
-    <Card className={cn('aspect-video overflow-hidden flex flex-col py-0', className)}>
+    <Card className={cn('aspect-video overflow-hidden flex flex-col py-0 relative', className)}>
       {/* Screenshot display area */}
       <div className="flex-1 grid place-items-center-safe">
-        {!screenshotData ? (
-          connected || status === 'pending' ? (
-            <Skeleton className="w-full h-full grid place-items-center">
-              <Spinner className="size-4" />
-            </Skeleton>
-          ) : (
-            <Empty>
-              <EmptyHeader>
-                <EmptyTitle>Connection Required</EmptyTitle>
-              </EmptyHeader>
-              <EmptyDescription>
-                Screenshot unavailable. Please check your connection to the server.
-              </EmptyDescription>
-            </Empty>
-          )
-        ) : hasScreenshot ? (
+        {screenshot ? (
           <img
-            src={`data:image/png;base64,${screenshotData.screenshot}`}
+            src={`data:image/png;base64,${screenshot}`}
             alt="Live screenshot"
             className="w-full h-full object-contain"
           />
+        ) : status === 'pending' ? (
+          <Skeleton className="w-full h-full grid place-items-center">
+            <Spinner className="size-4" />
+          </Skeleton>
         ) : (
           <Empty>
             <EmptyHeader>
               <EmptyTitle>No screenshot available</EmptyTitle>
             </EmptyHeader>
-            <EmptyDescription>
-              {screenshotData.connected ? 'Waiting for screenshot data...' : 'Device is offline'}
-            </EmptyDescription>
+            <EmptyDescription>Device is offline</EmptyDescription>
           </Empty>
         )}
       </div>
-
-      {/* Progress bar - only show when we have an estimate and a screenshot */}
-      {estimatedInterval && hasScreenshot && (
-        <div className="px-4 pb-3 pt-1 space-y-1">
-          <Progress value={progress} className="h-1" />
-          <div className="flex justify-between items-center text-xs text-muted-foreground">
-            <span>Next refresh in {Math.ceil(timeRemaining)}s</span>
-            <span>
-              Interval: ~{Math.round(estimatedInterval)}s{!isStable && ' (estimating...)'}
-            </span>
-          </div>
-        </div>
-      )}
+      {screenshot && <ScreenshotProgressBar interval={interval} timestamp={timestamp} />}
     </Card>
   )
 }
 
-function TaskManager({
-  tasks,
-  isLoading = false,
-  className,
+const ScreenshotProgressBar = ({
+  timestamp,
+  interval,
 }: {
-  tasks: TaskData[]
-  isLoading?: boolean
-  className?: string
-}) {
+  interval?: number
+  timestamp?: string
+}) => {
+  const { estimatedInterval, progress } = useScreenshotProgress(timestamp, interval)
+
+  if (!estimatedInterval) return null
+  return (
+    <div className="absolute bottom-0 left-0 right-0">
+      <Progress value={progress} className="opacity-50 h-0.5 bg-gray-500/50 backdrop-blur-2xl" />
+    </div>
+  )
+}
+
+function TaskManager({ className }: { className?: string }) {
+  const { data: tasks = [], status } = useSubscription(trpc.tasks.subscriptionOptions())
   const [searchQuery, setSearchQuery] = useState('')
+  const isLoading = status === 'connecting'
 
   const filteredTasks = tasks.filter(
     (task) =>
@@ -621,17 +532,17 @@ function TaskItem({
 }
 
 function LockToggle({
-  isLocked,
+  locked,
   connected,
-  className: _className,
+  className,
 }: {
-  isLocked: boolean
+  locked: boolean
   connected: boolean
   className?: string
 }) {
   const { variables, mutate, isPending } = useMutation(
     trpc.toggleLock.mutationOptions({
-      onSettled: () => queryClient.invalidateQueries({ queryKey: trpc.isLocked.queryKey() }),
+      onSettled: () => invalidateQueries({ queryKey: trpc.locked.queryKey() }),
       onSuccess: ({ message, success }) => (success ? toast.success : toast.error)(message),
       onError: (error) =>
         toast.error(error.data ? 'Lock Failed' : 'Unlock Failed', { description: error.message }),
@@ -640,15 +551,15 @@ function LockToggle({
 
   return (
     <Button
-      onClick={() => mutate(!isLocked)}
-      className="w-full"
+      onClick={() => mutate(!locked)}
+      className={cn('w-full', className)}
       disabled={!connected || isPending}
-      variant={isLocked ? 'default' : 'destructive'}
+      variant={locked ? 'default' : 'destructive'}
       size="lg"
     >
       {isPending ? (
         <Spinner />
-      ) : isLocked ? (
+      ) : locked ? (
         <LockIcon className="size-4 mr-2" />
       ) : (
         <UnlockIcon className="size-4 mr-2" />
@@ -657,7 +568,7 @@ function LockToggle({
         ? variables
           ? 'Locking...'
           : 'Unlocking...'
-        : isLocked
+        : locked
           ? 'Unlock Manager'
           : 'Lock Manager'}
     </Button>

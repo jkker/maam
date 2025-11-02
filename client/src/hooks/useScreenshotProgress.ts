@@ -15,7 +15,6 @@ interface ScreenshotProgressState {
 const EMA_ALPHA = 0.3 // Smoothing factor for exponential moving average (0 = all history, 1 = all new)
 const MAX_SAMPLE_COUNT = 10 // Maximum number of samples to track for stability
 const STABILITY_THRESHOLD = 3 // Minimum samples needed for stable estimate
-const SCREENSHOT_ID_PREFIX_LENGTH = 20 // Length of screenshot hash prefix for ID
 const PROGRESS_UPDATE_INTERVAL_MS = 100 // How often to update countdown (10fps)
 
 /**
@@ -23,28 +22,18 @@ const PROGRESS_UPDATE_INTERVAL_MS = 100 // How often to update countdown (10fps)
  * Uses exponential moving average for smooth, stable progress tracking
  */
 export function useScreenshotProgress(
-  screenshotData?: { screenshot?: string; timestamp?: string },
-  serverInterval?: number | null,
+  timestamp?: string,
+  interval?: number,
 ): ScreenshotProgressState {
   const lastScreenshotTimeRef = useRef<number | null>(null)
   const [estimatedInterval, setEstimatedInterval] = useState<number | null>(null)
   const [timeRemaining, setTimeRemaining] = useState<number>(0)
   const [sampleCount, setSampleCount] = useState(0)
-  const screenshotIdRef = useRef<string | null>(null)
-
-  // Detect new screenshot and update interval estimate
-  const currentScreenshotId = screenshotData?.screenshot
-    ? `${screenshotData.screenshot.slice(0, SCREENSHOT_ID_PREFIX_LENGTH)}-${screenshotData.timestamp}`
-    : null
 
   useEffect(() => {
-    if (!screenshotData?.screenshot || !screenshotData?.timestamp) return
+    if (!timestamp) return
 
-    // Only process if this is a new screenshot
-    if (currentScreenshotId === screenshotIdRef.current) return
-    screenshotIdRef.current = currentScreenshotId
-
-    const screenshotTime = new Date(screenshotData.timestamp).getTime()
+    const screenshotTime = new Date(timestamp).getTime()
     const lastTime = lastScreenshotTimeRef.current
 
     // Calculate interval from time between screenshots
@@ -64,15 +53,15 @@ export function useScreenshotProgress(
       setSampleCount((prev) => Math.min(prev + 1, MAX_SAMPLE_COUNT))
     } else {
       // First screenshot - use server interval if available
-      if (serverInterval) {
-        setEstimatedInterval(serverInterval)
-        setTimeRemaining(serverInterval)
+      if (interval) {
+        setEstimatedInterval(interval)
+        setTimeRemaining(interval)
         setSampleCount(1)
       }
     }
 
     lastScreenshotTimeRef.current = screenshotTime
-  }, [currentScreenshotId, screenshotData?.screenshot, screenshotData?.timestamp, serverInterval])
+  }, [timestamp, interval])
 
   // Countdown timer - updates every PROGRESS_UPDATE_INTERVAL_MS for smooth animation
   useEffect(() => {

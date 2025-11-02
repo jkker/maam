@@ -422,11 +422,9 @@ describe('MaaManager with Device Fixture', () => {
       manager.create('LinkStart')
       manager.create('HeartBeat')
 
-      const state = manager.state
-
-      expect(state.locked).toBe(false)
-      expect(state.tasks.length).toBeGreaterThanOrEqual(1) // HeartBeat is immediate, shouldn't be in state
-      expect(state.logs).toBeDefined()
+      expect(manager.locked).toBe(false)
+      expect(manager.state.length).toBeGreaterThanOrEqual(1) // HeartBeat is immediate, shouldn't be in state
+      expect(manager.logs).toBeDefined()
     })
   })
 })

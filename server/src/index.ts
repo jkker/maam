@@ -1,8 +1,9 @@
 import { serveStatic } from '@hono/node-server/serve-static'
 import { trpcServer } from '@hono/trpc-server'
 import { zValidator } from '@hono/zod-validator'
-import { initTRPC, type inferRouterInputs, type inferRouterOutputs } from '@trpc/server'
+import { initTRPC } from '@trpc/server'
 import { Hono } from 'hono'
+import { compress } from 'hono/compress'
 import { logger as loggerMiddleware } from 'hono/logger'
 import { mimes } from 'hono/utils/mime'
 import { z } from 'zod'
@@ -22,13 +23,7 @@ interface VariablesContext {
 
 export const manager = new MaaManager('bdc57941058a47e6bf56f2a993c87af3', 'user')
 
-const t = initTRPC.context<VariablesContext>().create({
-  sse: {
-    ping: {
-      enabled: false,
-    },
-  },
-})
+const t = initTRPC.context<VariablesContext>().create({ sse: { ping: { enabled: false } } })
 
 /**
  * Main application router combining all sub-routers
@@ -37,22 +32,10 @@ export const router = t.router({
   // Manager control procedures
   start: t.procedure.mutation(async ({ ctx: { manager } }) => manager.start()),
   stop: t.procedure.mutation(async ({ ctx: { manager } }) => manager.stop()),
-  heartbeat: t.procedure.query(async ({ ctx: { manager } }) =>
-    manager
-      .create('HeartBeat')
-      .waitFor('DONE')
-      .then(() => true)
-      .catch(() => false),
-  ),
-  isLocked: t.procedure.query(({ ctx: { manager } }) => manager.locked),
+  locked: t.procedure.query(({ ctx: { manager } }) => manager.locked),
   toggleLock: t.procedure
     .input(z.boolean())
     .mutation(async ({ ctx: { manager }, input }) => (input ? manager.lock() : manager.unlock())),
-
-  /**
-   * Get the currently running task (if any)
-   */
-  runningTask: t.procedure.query(({ ctx: { manager } }) => manager.getRunningTask()),
 
   // Schedule management procedures
   schedules: t.procedure.query(({ ctx: { manager } }) => manager.schedules.map((s) => s.data)),
@@ -88,13 +71,12 @@ export const router = t.router({
       return { success: true, task: task.data }
     }),
 
-  // state: t.procedure.query(({ ctx }) => ctx.manager.state),
-
   /**
    * Subscription for real-time task updates
    * Emits task data whenever task state changes
    */
-  state: t.procedure.subscription(({ ctx, signal }) => ctx.manager.listen('update', { signal })),
+  tasks: t.procedure.subscription(({ ctx, signal }) => ctx.manager.listen('update', { signal })),
+  runningTask: t.procedure.query(({ ctx: { manager } }) => manager.getRunningTask()),
 
   /**
    * Subscription for real-time screenshot monitoring
@@ -113,11 +95,6 @@ export const router = t.router({
     yield* ctx.manager.listen('deviceLog', { signal })
   }),
 
-  /**
-   * Get estimated screenshot refresh interval
-   */
-  screenshotInterval: t.procedure.query(({ ctx }) => ctx.manager.getEstimatedInterval()),
-
   eventCalendar: t.procedure.query(async () => fetchUpcomingEvents()),
 })
 
@@ -126,10 +103,8 @@ export const router = t.router({
  */
 export type TRPCRouter = typeof router
 
-export type RouterInput = inferRouterInputs<TRPCRouter>
-export type RouterOutput = inferRouterOutputs<TRPCRouter>
-
 export const app = new Hono<{ Variables: VariablesContext }>()
+  .use(compress())
   .use('/trpc/*', trpcServer({ router, createContext: () => ({ manager }) }))
   // MAA remote control protocol endpoints
   // https://docs.maa.plus/zh-cn/protocol/remote-control-schema.html#获取任务端点
@@ -159,6 +134,7 @@ export const app = new Hono<{ Variables: VariablesContext }>()
   // https://github.com/MaaAssistantArknights/MaaAssistantArknights/blob/dev/src/MaaWpfGui/Services/Notification/ExternalNotificationService.cs
   .post('/maa/deviceLog', async (c) => {
     const text = await c.req.text()
+    logger.debug('Received MAA Log:', text.slice(0, 100))
     try {
       manager.deviceLog(text)
       return c.json({ success: true })
@@ -208,6 +184,6 @@ else app.use(serveStatic({ root: 'dist/public', index: 'index.html' }))
 if (DEBUG) app.use(loggerMiddleware())
 
 export * from './lib/schema'
-export * from './lib/assignment'
+
 export default app
 export type { ScheduleData, TaskData }

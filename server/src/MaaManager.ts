@@ -204,7 +204,7 @@ export type ScheduleData = TaskSchedule['data']
 
 export type ConnectionSnapshot = {
   timestamp: string
-  connected: boolean
+  interval: number
   screenshot?: string
 }
 
@@ -223,11 +223,7 @@ export type LockResult = {
   message: string
   stoppedTask?: TaskData
 }
-type ManagerState = {
-  locked: boolean
-  tasks: TaskData[]
-  logs: string[]
-}
+
 type MaaManagerEventKey = keyof MaaManagerEventMap
 
 type MaaManagerEventMap = {
@@ -239,7 +235,7 @@ type MaaManagerEventMap = {
   screenshot: [ConnectionSnapshot]
   newListener: [MaaManagerEventKey]
   removeListener: [MaaManagerEventKey]
-  update: [ManagerState]
+  update: [TaskData[]]
 }
 
 export class MaaManager extends EventEmitter<MaaManagerEventMap> {
@@ -293,7 +289,7 @@ export class MaaManager extends EventEmitter<MaaManagerEventMap> {
     void this.initializeDatabase()
 
     // Start garbage collection for stale tasks
-    this.startGarbageCollection()
+    // this.startGarbageCollection()
   }
 
   /**
@@ -332,15 +328,6 @@ export class MaaManager extends EventEmitter<MaaManagerEventMap> {
     } catch (error) {
       logger.error(`Failed to initialize manager from database:`, error)
     }
-  }
-
-  emit<K>(
-    eventName: keyof MaaManagerEventMap | K,
-    ...args: K extends keyof MaaManagerEventMap ? MaaManagerEventMap[K] : never
-  ): boolean {
-    const res = super.emit(eventName as MaaManagerEventKey, ...args)
-    if (eventName !== 'update') super.emit('update', this.state)
-    return res
   }
 
   /**
@@ -386,8 +373,8 @@ export class MaaManager extends EventEmitter<MaaManagerEventMap> {
       dbService.saveTask(task.data, this.device).catch((error) => {
         logger.error(`Failed to persist task ${task.id} to database:`, error)
       })
+      this.emit('update', this.state)
     }
-
     return task
   }
 
@@ -507,7 +494,7 @@ export class MaaManager extends EventEmitter<MaaManagerEventMap> {
 
     const result: LockResult = { success, stoppedTask: stoppedTask?.data, message }
     this.emit('lock', result)
-
+    this.emit('update', this.state)
     return result
   }
   private unlockTime?: Temporal.ZonedDateTime
@@ -576,6 +563,8 @@ export class MaaManager extends EventEmitter<MaaManagerEventMap> {
       result = { success: false, nextSchedule, message }
     }
     this.emit('unlock', result)
+    this.emit('update', this.state)
+
     return result
   }
 
@@ -627,15 +616,10 @@ export class MaaManager extends EventEmitter<MaaManagerEventMap> {
     }
     return false
   }
-
-  public get state(): ManagerState {
-    return {
-      locked: this.locked,
-      tasks: Array.from(this.tasks.values())
-        .filter((t) => !t.immediate)
-        .map(({ data }) => data),
-      logs: this.logs.slice(-50),
-    }
+  public get state() {
+    return Array.from(this.tasks.values())
+      .filter((t) => !t.immediate)
+      .map(({ data }) => data)
   }
 
   /**
@@ -701,6 +685,7 @@ export class MaaManager extends EventEmitter<MaaManagerEventMap> {
       dbService.updateTask(task.data, this.device).catch((error) => {
         logger.error(`Failed to update task ${task.id} in database:`, error)
       })
+      this.emit('update', this.state)
     }
 
     return task
@@ -755,16 +740,6 @@ export class MaaManager extends EventEmitter<MaaManagerEventMap> {
     }
   }
 
-  /**
-   * Gets the estimated screenshot refresh interval in seconds
-   * Returns null if no interval has been established yet
-   */
-  public getEstimatedInterval(): number | null {
-    if (!this.estimatedIntervalMs) return null
-    // Round to nearest second to reduce noise and rerenders
-    return Math.round(this.estimatedIntervalMs / 1000)
-  }
-
   private startScreenshotPolling() {
     if (this.screenshotIntervalId) {
       logger.debug('Screenshot polling already active, skipping start')
@@ -789,14 +764,14 @@ export class MaaManager extends EventEmitter<MaaManagerEventMap> {
         this.emit('screenshot', {
           screenshot: payload,
           timestamp: completedAt.toString(),
-          connected: true,
+          interval: Math.round(this.estimatedIntervalMs / 1000),
         })
       } catch (error) {
         logger.error('Screenshot polling error:', error)
         this.emit('screenshot', {
           timestamp: getNow().toString(),
-          connected: false,
           screenshot: undefined,
+          interval: Math.round(this.estimatedIntervalMs / 1000),
         })
       } finally {
         isRunning = false
