@@ -13,7 +13,7 @@ import { initDatabase } from './lib/db'
 import { DEBUG, logger } from './lib/logger'
 import { fetchUpcomingEvents } from './lib/prts.wiki'
 import { reportSchema, scheduleSchema } from './lib/schema'
-import { MaaManager, type ScheduleData, type TaskData } from './MaaManager'
+import { MaaManager, MJPEG_BOUNDARY, type ScheduleData, type TaskData } from './MaaManager'
 // Initialize database
 initDatabase()
 
@@ -115,7 +115,7 @@ export const app = new Hono<{ Variables: VariablesContext }>()
         manager.addStreamController(controller)
 
         // Send initial boundary
-        const initialBoundary = new TextEncoder().encode('--boundarystring\r\n')
+        const initialBoundary = new TextEncoder().encode(`${MJPEG_BOUNDARY}\r\n`)
         controller.enqueue(initialBoundary)
       },
       cancel() {
@@ -129,7 +129,7 @@ export const app = new Hono<{ Variables: VariablesContext }>()
     })
 
     return c.body(stream, 200, {
-      'Content-Type': 'multipart/x-mixed-replace;boundary=--boundarystring',
+      'Content-Type': `multipart/x-mixed-replace;boundary=${MJPEG_BOUNDARY}`,
       'Cache-Control': 'no-cache',
       'Connection': 'keep-alive',
     })

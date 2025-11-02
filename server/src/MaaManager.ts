@@ -9,6 +9,9 @@ import { DEBUG, logger } from './lib/logger'
 import { type ImmediateTask, type Schedule, type TaskStage, type TaskType } from './lib/schema'
 import { getNow } from './lib/temporal'
 
+// MJPEG streaming constants
+const MJPEG_BOUNDARY = '--boundarystring'
+
 /**
  * Runtime representation of a Maa task, including life-cycle state transitions.
  * @remarks
@@ -918,9 +921,8 @@ export class MaaManager extends EventEmitter<MaaManagerEventMap> {
   private writeFrameToStreams(jpegBuffer: Buffer) {
     if (this.streamControllers.size === 0) return
 
-    const boundary = '--boundarystring'
     const frame = [
-      boundary,
+      MJPEG_BOUNDARY,
       'Content-Type: image/jpeg',
       `Content-Length: ${jpegBuffer.length}`,
       '',
@@ -978,3 +980,6 @@ export class MaaManager extends EventEmitter<MaaManagerEventMap> {
     logger.info(`Manager ${this.device} cleaned up`)
   }
 }
+
+// Export MJPEG constants for use in other modules
+export { MJPEG_BOUNDARY }
