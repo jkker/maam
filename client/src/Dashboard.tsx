@@ -59,11 +59,9 @@ import { ButtonGroup } from './components/ui/button-group'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './components/ui/card'
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from './components/ui/empty'
 import { Field, FieldLabel } from './components/ui/field'
-import { Progress } from './components/ui/progress'
 import { ScrollArea } from './components/ui/scroll-area'
 import { Skeleton } from './components/ui/skeleton'
 import { Spinner } from './components/ui/spinner'
-import { useScreenshotProgress } from './hooks/useScreenshotProgress'
 import { Footer, Header } from './Layout'
 import { invalidateQueries, trpc } from './lib/trpc'
 import { cn, formatDuration, formatTaskType, formatTime } from './utils'
@@ -348,52 +346,39 @@ function QuickActions({ locked, connected }: { locked: boolean; connected: boole
 }
 
 function ScreenshotViewer({ className }: { className?: string }) {
-  const { data: { screenshot, timestamp, interval } = {}, status } = useSubscription(
-    trpc.screenshot.subscriptionOptions(),
-  )
+  const [imageError, setImageError] = React.useState(false)
+  const [isLoading, setIsLoading] = React.useState(true)
 
   return (
     <Card className={cn('aspect-video overflow-hidden flex flex-col py-0 relative', className)}>
       {/* Screenshot display area */}
       <div className="flex-1 grid place-items-center-safe">
-        {screenshot ? (
-          <img
-            src={`data:image/png;base64,${screenshot}`}
-            alt="Live screenshot"
-            className="w-full h-full object-contain"
-          />
-        ) : status === 'pending' ? (
-          <Skeleton className="w-full h-full grid place-items-center">
+        {isLoading && (
+          <Skeleton className="w-full h-full grid place-items-center absolute">
             <Spinner className="size-4" />
           </Skeleton>
-        ) : (
+        )}
+        {imageError ? (
           <Empty>
             <EmptyHeader>
               <EmptyTitle>No screenshot available</EmptyTitle>
             </EmptyHeader>
             <EmptyDescription>Device is offline</EmptyDescription>
           </Empty>
+        ) : (
+          <img
+            src="/screenshot-stream"
+            alt="Live screenshot"
+            className="w-full h-full object-contain"
+            onLoad={() => setIsLoading(false)}
+            onError={() => {
+              setIsLoading(false)
+              setImageError(true)
+            }}
+          />
         )}
       </div>
-      {screenshot && <ScreenshotProgressBar interval={interval} timestamp={timestamp} />}
     </Card>
-  )
-}
-
-const ScreenshotProgressBar = ({
-  timestamp,
-  interval,
-}: {
-  interval?: number
-  timestamp?: string
-}) => {
-  const { estimatedInterval, progress } = useScreenshotProgress(timestamp, interval)
-
-  if (!estimatedInterval) return null
-  return (
-    <div className="absolute bottom-0 left-0 right-0">
-      <Progress value={progress} className="opacity-50 h-0.5 bg-gray-500/50 backdrop-blur-2xl" />
-    </div>
   )
 }
 

@@ -1,5 +1,6 @@
 import { EventEmitter } from 'node:events'
 
+import sharp from 'sharp'
 import { CronJob, Task as ScheduledTask, ToadScheduler } from 'toad-scheduler'
 
 import { IMMEDIATE_TASK, T } from './const'
@@ -243,6 +244,9 @@ export class MaaManager extends EventEmitter<MaaManagerEventMap> {
   private readonly MAX_TIMESTAMP_HISTORY = 10
   private estimatedIntervalMs = 1000
 
+  // MJPEG stream controllers
+  private streamControllers = new Set<ReadableStreamDefaultController<Uint8Array>>()
+
   // Delayed unlock state
   private unlockTimerId?: NodeJS.Timeout
   private unlockScheduledFor?: Temporal.ZonedDateTime
@@ -264,18 +268,6 @@ export class MaaManager extends EventEmitter<MaaManagerEventMap> {
     private intervalMs = 2000,
   ) {
     super()
-
-    this.on('newListener', (event) => {
-      if (event === 'screenshot' && this.listenerCount('screenshot') === 0) {
-        this.startScreenshotPolling()
-      }
-    })
-
-    this.on('removeListener', (event) => {
-      if (event === 'screenshot' && this.listenerCount('screenshot') === 0) {
-        this.stopScreenshotPolling()
-      }
-    })
 
     // Initialize manager state in database
     void this.initializeDatabase()
@@ -753,6 +745,14 @@ export class MaaManager extends EventEmitter<MaaManagerEventMap> {
         const timestamp = Date.now()
         this.recordScreenshotTimestamp(timestamp)
 
+        // Convert Base64 PNG to JPEG buffer
+        const pngBuffer = Buffer.from(payload, 'base64')
+        const jpegBuffer = await sharp(pngBuffer).jpeg({ quality: 80 }).toBuffer()
+
+        // Write JPEG frame to all active stream controllers
+        this.writeFrameToStreams(jpegBuffer)
+
+        // Still emit event for backwards compatibility (if needed elsewhere)
         this.emit('screenshot', {
           screenshot: payload,
           timestamp: completedAt.toString(),
@@ -883,6 +883,70 @@ export class MaaManager extends EventEmitter<MaaManagerEventMap> {
       dbService.updateTask(task.data, this.device).catch((error) => {
         logger.error(`Failed to update task ${task.id} in database:`, error)
       })
+    }
+  }
+
+  /**
+   * Adds a stream controller to receive MJPEG frames
+   */
+  public addStreamController(controller: ReadableStreamDefaultController<Uint8Array>) {
+    this.streamControllers.add(controller)
+    logger.info(`Added stream controller. Active streams: ${this.streamControllers.size}`)
+
+    // Start screenshot polling if this is the first stream
+    if (this.streamControllers.size === 1) {
+      this.startScreenshotPolling()
+    }
+  }
+
+  /**
+   * Removes a stream controller
+   */
+  public removeStreamController(controller: ReadableStreamDefaultController<Uint8Array>) {
+    this.streamControllers.delete(controller)
+    logger.info(`Removed stream controller. Active streams: ${this.streamControllers.size}`)
+
+    // Stop screenshot polling if no more streams are active
+    if (this.streamControllers.size === 0) {
+      this.stopScreenshotPolling()
+    }
+  }
+
+  /**
+   * Writes a JPEG frame to all active stream controllers with proper multipart formatting
+   */
+  private writeFrameToStreams(jpegBuffer: Buffer) {
+    if (this.streamControllers.size === 0) return
+
+    const boundary = '--boundarystring'
+    const frame = [
+      boundary,
+      'Content-Type: image/jpeg',
+      `Content-Length: ${jpegBuffer.length}`,
+      '',
+      '',
+    ].join('\r\n')
+
+    const frameHeader = new TextEncoder().encode(frame)
+    const frameEnd = new TextEncoder().encode('\r\n')
+
+    // Write to all controllers, removing any that error
+    const controllersToRemove: ReadableStreamDefaultController<Uint8Array>[] = []
+
+    for (const controller of this.streamControllers) {
+      try {
+        controller.enqueue(frameHeader)
+        controller.enqueue(jpegBuffer)
+        controller.enqueue(frameEnd)
+      } catch (error) {
+        logger.error('Error writing to stream controller:', error)
+        controllersToRemove.push(controller)
+      }
+    }
+
+    // Clean up failed controllers
+    for (const controller of controllersToRemove) {
+      this.removeStreamController(controller)
     }
   }
 

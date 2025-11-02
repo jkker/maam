@@ -78,12 +78,6 @@ export const router = t.router({
   tasks: t.procedure.subscription(({ ctx, signal }) => ctx.manager.listen('update', { signal })),
   runningTask: t.procedure.query(({ ctx: { manager } }) => manager.getRunningTask()),
 
-  /**
-   * Subscription for real-time screenshot monitoring
-   */
-  screenshot: t.procedure.subscription(({ ctx, signal }) =>
-    ctx.manager.listen('screenshot', { signal }),
-  ),
   screenshotQuery: t.procedure.query(async ({ ctx }) => {
     const { payload } = await ctx.manager.create('CaptureImageNow').waitFor('DONE')
     if (!payload) throw new Error('Failed to capture screenshot')
@@ -106,6 +100,32 @@ export type TRPCRouter = typeof router
 export const app = new Hono<{ Variables: VariablesContext }>()
   .use(compress())
   .use('/trpc/*', trpcServer({ router, createContext: () => ({ manager }) }))
+  // MJPEG screenshot stream endpoint
+  .get('/screenshot-stream', (c) => {
+    logger.info('New MJPEG stream connection')
+
+    const stream = new ReadableStream({
+      start(controller) {
+        // Register this controller with the manager
+        manager.addStreamController(controller)
+
+        // Send initial boundary
+        const initialBoundary = new TextEncoder().encode('--boundarystring\r\n')
+        controller.enqueue(initialBoundary)
+      },
+      cancel() {
+        logger.info('MJPEG stream connection closed')
+        // Note: We can't easily get the controller here, but it will be cleaned up
+        // when write attempts fail
+      },
+    })
+
+    return c.body(stream, 200, {
+      'Content-Type': 'multipart/x-mixed-replace;boundary=--boundarystring',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+    })
+  })
   // MAA remote control protocol endpoints
   // https://docs.maa.plus/zh-cn/protocol/remote-control-schema.html#获取任务端点
   .post('/maa/getTask', (c) => {
