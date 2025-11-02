@@ -18,7 +18,12 @@ const config = defineConfig(
   includeIgnoreFile(resolve(import.meta.dirname, '.gitignore')),
   {
     name: 'base',
-    files: ['eslint.config.js', './server/src/**/*', './server/test/**/*', './client/src/**/*.{ts,tsx}'],
+    files: [
+      'eslint.config.js',
+      './server/src/**/*',
+      './server/test/**/*',
+      './client/src/**/*.{ts,tsx}',
+    ],
     extends: [
       js.configs.recommended,
       ts.configs.recommendedTypeChecked,

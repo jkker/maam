@@ -37,7 +37,9 @@ export class MaaDeviceFixture {
     }
 
     this.isRunning = true
-    console.log(`[Fixture] Starting MAA device fixture with ${this.config.pollingInterval}ms polling interval`)
+    console.log(
+      `[Fixture] Starting MAA device fixture with ${this.config.pollingInterval}ms polling interval`,
+    )
 
     // Start polling for tasks
     this.pollingIntervalId = setInterval(() => {
@@ -79,7 +81,9 @@ export class MaaDeviceFixture {
         return
       }
 
-      const data = (await response.json()) as { tasks: Array<{ id: string; type: TaskType; params?: string }> }
+      const data = (await response.json()) as {
+        tasks: Array<{ id: string; type: TaskType; params?: string }>
+      }
       const tasks = data.tasks
 
       if (tasks.length > 0) {
