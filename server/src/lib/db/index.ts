@@ -4,10 +4,9 @@ import { fileURLToPath } from 'node:url'
 
 import Database from 'better-sqlite3'
 import { drizzle } from 'drizzle-orm/better-sqlite3'
-import { Temporal } from 'temporal-polyfill'
 
 import * as schema from './schema'
-import { ARKNIGHTS_TIME_ZONE, DEFAULT_DEVICE } from '../../const'
+import { DEFAULT_DEVICE, DEFAULT_SCHEDULES } from '../../const'
 import { logger } from '../logger'
 
 const __filename = fileURLToPath(import.meta.url)
@@ -156,22 +155,15 @@ function seedDefaultSchedules() {
     return
   }
 
-  const defaultSchedules = [
-    { type: 'LinkStart', hour: 4, timezone: ARKNIGHTS_TIME_ZONE },
-    { type: 'LinkStart', hour: 12, timezone: ARKNIGHTS_TIME_ZONE },
-    { type: 'LinkStart', hour: 20, timezone: ARKNIGHTS_TIME_ZONE },
-  ]
-
-  const timezone = Temporal.Now.timeZoneId()
   const insertSchedule = sqlite!.prepare(`
     INSERT INTO schedules (id, type, hour, minute, timezone, run_count, device)
     VALUES (?, ?, ?, ?, ?, 0, ?)
   `)
 
-  for (const schedule of defaultSchedules) {
-    const id = `${schedule.type}|${schedule.hour}@${ARKNIGHTS_TIME_ZONE}`
+  for (const { type, hour, timezone } of DEFAULT_SCHEDULES) {
+    const id = `${type}|${hour}@${timezone}`
     try {
-      insertSchedule.run(id, schedule.type, schedule.hour, 0, timezone, DEFAULT_DEVICE)
+      insertSchedule.run(id, type, hour, 0, timezone, DEFAULT_DEVICE)
       logger.info(`Seeded default schedule: ${id}`)
     } catch (error) {
       logger.warn(`Failed to seed schedule ${id}:`, error)

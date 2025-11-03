@@ -36,15 +36,15 @@ export const ARKNIGHTS_TIME_ZONE = 'Asia/Shanghai'
 
 export const DEFAULT_DEVICE = 'bdc57941058a47e6bf56f2a993c87af3'
 export const DEFAULT_USER = 'user'
-export const MJPEG_BOUNDARY = '--bound' // MJPEG streaming constants
+export const DEFAULT_SCHEDULES = [
+  { type: 'LinkStart', hour: 4, timezone: ARKNIGHTS_TIME_ZONE },
+  { type: 'LinkStart', hour: 12, timezone: ARKNIGHTS_TIME_ZONE },
+  { type: 'LinkStart', hour: 20, timezone: ARKNIGHTS_TIME_ZONE },
+]
 
-// Stage selection data with availability by weekday
-interface StageOption {
-  id: string
-  label: string
-  weekdays?: number[] // 1=Monday, 7=Sunday; empty means all days
-}
-export const STAGE_OPTIONS: StageOption[] = [
+export const MJPEG_BOUNDARY = '--bound'
+
+export const STAGE_OPTIONS = [
   { id: 'default', label: '当前/上次' },
   // 主线关卡
   { id: '1-7', label: '固源岩' },
@@ -67,4 +67,8 @@ export const STAGE_OPTIONS: StageOption[] = [
   { id: 'PR-C-2', label: '先/辅芯片组', weekdays: [3, 4, 6, 7] },
   { id: 'PR-D-1', label: '近/特芯片', weekdays: [2, 3, 6, 7] },
   { id: 'PR-D-2', label: '近/特芯片组', weekdays: [2, 3, 6, 7] },
-]
+] satisfies {
+  id: string
+  label: string
+  weekdays?: number[] // 1=Monday, 7=Sunday; empty means all days
+}[]

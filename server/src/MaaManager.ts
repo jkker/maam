@@ -60,7 +60,7 @@ export class MaaManager extends EventEmitter<MaaManagerEventMap> {
     public device: string,
     public user: string,
     private tz = Temporal.Now.timeZoneId(),
-    private intervalMs = 2000,
+    private intervalMs = 1_000,
   ) {
     super()
 
