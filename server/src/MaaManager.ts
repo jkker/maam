@@ -1,204 +1,16 @@
+import type { Schedule, TaskType } from './lib/schema'
+
 import { EventEmitter } from 'node:events'
 
-import { CronJob, Task as ScheduledTask, ToadScheduler } from 'toad-scheduler'
+import sharp from 'sharp'
+import { ToadScheduler } from 'toad-scheduler'
 
-import { IMMEDIATE_TASK, T } from './const'
+import { MJPEG_BOUNDARY, T } from './const'
 import { dbService } from './lib/db/service'
-import { DEBUG, logger } from './lib/logger'
-import { type ImmediateTask, type Schedule, type TaskStage, type TaskType } from './lib/schema'
+import { logger } from './lib/logger'
 import { getNow } from './lib/temporal'
-
-/**
- * Runtime representation of a Maa task, including life-cycle state transitions.
- * @remarks
- * Instances of this class emit {@link TaskStage} events and buffer execution metadata to be
- * returned through the Maa remote control protocol.
- */
-export class Task extends EventEmitter<Record<TaskStage, [Task]>> {
-  public payload?: string
-  public status?: 'SUCCESS' | 'FAILED' | 'CANCELLED'
-  public stage: TaskStage = 'PENDING'
-  public createdAt: Temporal.ZonedDateTime
-  public startedAt?: Temporal.ZonedDateTime
-  public completedAt?: Temporal.ZonedDateTime
-  /**
-   * Creates a new task and primes it for dispatching.
-   * @param id - Unique identifier representing the Maa task instance.
-   * @param type - Domain specific task type as defined by the Maa schema.
-   * @param params - Optional Maa task payload originating from the controller request.
-   */
-  constructor(
-    public id: string,
-    public type: TaskType,
-    public params: string | undefined = undefined,
-  ) {
-    super()
-    this.createdAt = getNow()
-  }
-
-  static RunError = class TaskRunError extends Error {
-    name = 'TaskRunError'
-  }
-  static TimeoutError = class TimeoutError extends Error {
-    name = 'TimeoutError'
-  }
-
-  static isImmediate = (type: TaskType): type is ImmediateTask =>
-    IMMEDIATE_TASK.includes(type as ImmediateTask)
-
-  /**
-   * Determines whether the provided task type is configured for immediate execution.
-   * @param type - Task type to inspect.
-   * @returns `true` when the task type should run synchronously.
-   */
-  get immediate() {
-    return Task.isImmediate(this.type)
-  }
-  get image() {
-    if (this.type === 'CaptureImage' || this.type === 'CaptureImageNow') {
-      if (!this.payload) throw new Error('No payload available')
-      return Buffer.from(this.payload, 'base64')
-    }
-  }
-  get duration() {
-    if (!this.startedAt) return undefined
-    const end = this.completedAt ?? getNow()
-    return end.since(this.startedAt).total('milliseconds')
-  }
-
-  get data() {
-    const {
-      id,
-      type,
-      params,
-      stage,
-      status,
-      payload,
-      createdAt,
-      startedAt,
-      completedAt,
-      duration,
-    } = this
-    return {
-      id,
-      type,
-      stage,
-      createdAt: createdAt.toString(),
-      ...(params && { params }),
-      ...(status && { status }),
-      ...(payload && { payload }),
-      ...(startedAt && { startedAt: startedAt.toString(), duration }),
-      ...(completedAt && { completedAt: completedAt.toString() }),
-    }
-  }
-  /**
-   * Emits a structured log line summarizing the current task status.
-   * @param message - Optional prefix that adds operator-friendly context.
-   */
-  log(message?: string) {
-    const { stage, status, type, payload, params } = this.data
-    const args: string[] = [status ?? stage, type]
-    if (message) args.unshift(message)
-    if (params) args.push(`(${params})`)
-    const isCaptureImageType = type.startsWith('CaptureImage')
-    if (payload?.length && !isCaptureImageType) args.push(`➡️ ${payload}`)
-    if (DEBUG) args.push(`(id: ${this.id})`)
-
-    // Debug log high-frequency tasks to reduce noise
-    if (isCaptureImageType || type === 'HeartBeat') logger.debug(...args)
-    else logger.info(...args)
-  }
-  /**
-   * Blocks until the task emits the requested event or the timeout elapses.
-   * @param stage - Event name to await.
-   * @param timeout - Temporal duration specifying the wait limit. Defaults to one minute.
-   * @returns The task instance once the event is observed.
-   * @throws {@link Task.TimeoutError} Thrown when the task fails to emit the event in time.
-   */
-  waitFor = async (stage: TaskStage, timeout: Temporal.DurationLike = { minutes: 1 }) => {
-    if (this.stage === stage) return this
-    const ms = Temporal.Duration.from(timeout).total('milliseconds')
-    const eventPromise = EventEmitter.once(this, stage)
-    const timeoutPromise = new Promise((_resolve, reject) =>
-      setTimeout(() => reject(new Task.TimeoutError()), ms),
-    )
-    await Promise.race([eventPromise, timeoutPromise])
-
-    return this
-  }
-}
-
-export type TaskData = Task['data']
-
-class TaskSchedule extends CronJob {
-  readonly id: string
-  public lastRunTime?: Temporal.ZonedDateTime
-  public runCount: number = 0
-
-  public cooldownUntil?: Temporal.ZonedDateTime
-
-  constructor(
-    public type: TaskType,
-    public hour: number,
-    public minute: number,
-    public timezone: string,
-    handler: () => void,
-  ) {
-    const id = `${type}|${hour}:${minute}`
-
-    // Runs daily at specified hour and minute
-    super(
-      { cronExpression: `0 ${minute} ${hour} * * *`, timezone },
-      new ScheduledTask(`task-${id}`, () => {
-        if (this.cooldownUntil) {
-          logger.info(
-            `Skipping scheduled task ${this.id} due to active cooldown until ${this.cooldownUntil.toString()}`,
-          )
-          delete this.cooldownUntil
-          return
-        }
-        this.lastRunTime = getNow()
-        this.runCount += 1
-        logger.info(`Executing scheduled task ${this.id} (run #${this.runCount})`)
-        try {
-          handler()
-        } catch (error) {
-          logger.error(`Scheduled task ${this.id} failed:`, error)
-        }
-      }),
-      { preventOverrun: true, id },
-    )
-    this.id = id
-  }
-
-  get data() {
-    return {
-      id: this.id,
-      type: this.type,
-      hour: this.hour,
-      minute: this.minute,
-      timezone: this.timezone,
-      ...(this.lastRunTime && { lastRunTime: this.lastRunTime.toString() }),
-      ...(this.runCount && { runCount: this.runCount }),
-    }
-  }
-
-  get nextRunTime() {
-    const t = getNow()
-    const next = t.withPlainTime({ hour: this.hour, minute: this.minute })
-    // If time has passed today, schedule for tomorrow
-    if (Temporal.ZonedDateTime.compare(next, t) <= 0) return next.add({ days: 1 })
-    return next
-  }
-}
-
-export type ScheduleData = TaskSchedule['data']
-
-export type ConnectionSnapshot = {
-  timestamp: string
-  interval: number
-  screenshot?: string
-}
+import { Task, type TaskData } from './Task'
+import { TaskSchedule } from './TaskSchedule'
 
 export type UnlockResult = {
   success: boolean
@@ -216,17 +28,10 @@ export type LockResult = {
   stoppedTask?: TaskData
 }
 
-type MaaManagerEventKey = keyof MaaManagerEventMap
-
 type MaaManagerEventMap = {
   lock: [UnlockResult]
   unlock: [LockResult]
-  taskDispatched: [TaskData]
-  taskCompleted: [TaskData]
   deviceLog: [string[]]
-  screenshot: [ConnectionSnapshot]
-  newListener: [MaaManagerEventKey]
-  removeListener: [MaaManagerEventKey]
   update: [TaskData[]]
 }
 
@@ -238,19 +43,13 @@ export class MaaManager extends EventEmitter<MaaManagerEventMap> {
   logs: string[] = []
 
   // Screenshot polling state
-  private screenshotIntervalId?: NodeJS.Timeout
-  private screenshotTimestamps: number[] = []
-  private readonly MAX_TIMESTAMP_HISTORY = 10
-  private estimatedIntervalMs = 1000
+  private screenshotPollingInterval?: NodeJS.Timeout
+  // MJPEG stream controllers
+  private streams = new Set<ReadableStreamDefaultController<Uint8Array>>()
 
   // Delayed unlock state
   private unlockTimerId?: NodeJS.Timeout
   private unlockScheduledFor?: Temporal.ZonedDateTime
-
-  // Garbage collection state
-  private gcIntervalId?: NodeJS.Timeout
-  private readonly TASK_TIMEOUT_MS = 24 * 60 * 60 * 1000 // 24 hours
-  private readonly GC_INTERVAL_MS = 60 * 60 * 1000 // Run GC every hour
 
   /**
    * @param device - Allowed Maa device identifier.
@@ -261,21 +60,9 @@ export class MaaManager extends EventEmitter<MaaManagerEventMap> {
     public device: string,
     public user: string,
     private tz = Temporal.Now.timeZoneId(),
-    private intervalMs = 2000,
+    private intervalMs = 1_000,
   ) {
     super()
-
-    this.on('newListener', (event) => {
-      if (event === 'screenshot' && this.listenerCount('screenshot') === 0) {
-        this.startScreenshotPolling()
-      }
-    })
-
-    this.on('removeListener', (event) => {
-      if (event === 'screenshot' && this.listenerCount('screenshot') === 0) {
-        this.stopScreenshotPolling()
-      }
-    })
 
     // Initialize manager state in database
     void this.initializeDatabase()
@@ -334,27 +121,26 @@ export class MaaManager extends EventEmitter<MaaManagerEventMap> {
       throw new Error('Manager locked, cannot dispatch queued tasks')
 
     // Check for duplicate tasks in queue (prevent queuing the same task multiple times)
-    const duplicateInQueue = this.queue.find(
+    const pendingDuplicate = this.queue.find(
       (t) => t.type === type && t.params === params && t.stage === 'PENDING',
     )
-    if (duplicateInQueue && !Task.isImmediate(type)) {
+    if (pendingDuplicate) {
       logger.warn(`Duplicate task ${type} already in queue, returning existing task`)
-      return duplicateInQueue
+      return pendingDuplicate
     }
 
-    // Check for running tasks of the same type (except immediate tasks)
+    // Check for running tasks of the same type
     const runningDuplicate = Array.from(this.tasks.values()).find(
-      (t) => t.type === type && t.params === params && t.stage === 'RUNNING' && !t.immediate,
+      (t) => t.type === type && t.params === params && t.stage === 'RUNNING',
     )
     if (runningDuplicate) {
       logger.warn(`Task ${type} is already running, returning existing task`)
       return runningDuplicate
     }
 
-    const now = Temporal.Now.instant().toZonedDateTimeISO(this.tz)
+    const now = getNow(this.tz)
 
-    const id = `${type}|${now.toString()}`
-    const task = new Task(id, type, params)
+    const task = new Task(`${type}|${now.toString()}`, type, params)
     this.tasks.set(task.id, task)
     this.queue.push(task)
 
@@ -668,7 +454,6 @@ export class MaaManager extends EventEmitter<MaaManagerEventMap> {
     if (status) task.status = status
 
     this.queue = this.queue.filter((t) => t.id !== id)
-    this.emit('taskCompleted', task.data)
     task.emit('DONE', task)
     task.log()
 
@@ -704,67 +489,66 @@ export class MaaManager extends EventEmitter<MaaManagerEventMap> {
     return tasks
   }
 
-  /**
-   * Records a screenshot timestamp and calculates estimated interval
-   */
-  private recordScreenshotTimestamp(timestamp: number) {
-    this.screenshotTimestamps.push(timestamp)
+  public async getScreenshotJPEG() {
+    const { payload } = await this.create('CaptureImageNow').waitFor('DONE', { seconds: 10 })
+    if (!payload) throw new Error('No screenshot payload received')
 
-    // Keep only recent history - use slice for better clarity
-    if (this.screenshotTimestamps.length > this.MAX_TIMESTAMP_HISTORY) {
-      this.screenshotTimestamps = this.screenshotTimestamps.slice(-this.MAX_TIMESTAMP_HISTORY)
-    }
-
-    // Calculate estimated interval if we have at least 2 timestamps
-    if (this.screenshotTimestamps.length >= 2) {
-      const intervals: number[] = []
-      for (let i = 1; i < this.screenshotTimestamps.length; i++) {
-        intervals.push(this.screenshotTimestamps[i] - this.screenshotTimestamps[i - 1])
-      }
-
-      // Use moving average of intervals
-      const sum = intervals.reduce((acc, val) => acc + val, 0)
-      this.estimatedIntervalMs = Math.round(sum / intervals.length)
-
-      logger.debug(
-        `Estimated screenshot interval: ${this.estimatedIntervalMs}ms (based on ${intervals.length} samples)`,
-      )
-    }
+    // Convert Base64 PNG to JPEG buffer
+    const pngBuffer = Buffer.from(payload, 'base64')
+    const jpegBuffer = await sharp(pngBuffer).jpeg({ quality: 100 }).keepExif().toBuffer()
+    return jpegBuffer as Buffer<ArrayBuffer>
   }
 
   private startScreenshotPolling() {
-    if (this.screenshotIntervalId) {
-      logger.debug('Screenshot polling already active, skipping start')
-      return
-    }
+    if (this.screenshotPollingInterval)
+      return void logger.debug('Screenshot polling already active, skipping start')
+
     let isRunning = false
 
     logger.info(`Starting screenshot polling at ${this.intervalMs}ms interval`)
-    this.screenshotIntervalId = setInterval(async () => {
+    this.screenshotPollingInterval = setInterval(async () => {
       if (isRunning) return
       isRunning = true
       try {
-        const { payload, completedAt } = await this.create('CaptureImageNow').waitFor('DONE', {
-          seconds: 10,
-        })
-        if (!payload || !completedAt) throw new Error('No screenshot payload received')
+        const buffer = await this.getScreenshotJPEG()
+        // Write JPEG frame to all active stream controllers
+        if (this.streams.size === 0) return
 
-        // Record timestamp for interval estimation
-        const timestamp = Date.now()
-        this.recordScreenshotTimestamp(timestamp)
+        // Writes a JPEG frame to all active stream controllers with proper multipart formatting
+        const encoder = new TextEncoder()
 
-        this.emit('screenshot', {
-          screenshot: payload,
-          timestamp: completedAt.toString(),
-          interval: Math.round(this.estimatedIntervalMs / 1000),
-        })
+        const frameHeader = encoder.encode(
+          [
+            MJPEG_BOUNDARY,
+            `Content-Type: image/jpeg`,
+            `Content-Length: ${buffer.length}`,
+            '',
+            '',
+          ].join('\r\n'),
+        )
+        const frameEnd = encoder.encode('\r\n')
+
+        // Write to all controllers, removing any that error
+        const controllersToRemove: ReadableStreamDefaultController<Uint8Array>[] = []
+
+        for (const controller of this.streams) {
+          try {
+            controller.enqueue(frameHeader)
+            controller.enqueue(buffer)
+            controller.enqueue(frameEnd)
+          } catch (error) {
+            logger.error('Error writing to stream controller:', error)
+            controllersToRemove.push(controller)
+          }
+        }
+
+        // Clean up failed controllers
+        for (const controller of controllersToRemove) {
+          this.streams.delete(controller)
+        }
+        if (this.streams.size === 0) this.stopScreenshotPolling()
       } catch (error) {
         logger.error('Screenshot polling error:', error)
-        this.emit('screenshot', {
-          timestamp: getNow().toString(),
-          screenshot: undefined,
-          interval: Math.round(this.estimatedIntervalMs / 1000),
-        })
       } finally {
         isRunning = false
       }
@@ -775,118 +559,33 @@ export class MaaManager extends EventEmitter<MaaManagerEventMap> {
    * Stops screenshot polling interval if no more active subscribers
    */
   private stopScreenshotPolling() {
-    if (!this.screenshotIntervalId) return
+    if (!this.screenshotPollingInterval) return
 
     logger.info('Stopping screenshot polling')
-    clearInterval(this.screenshotIntervalId)
-    this.screenshotIntervalId = undefined
+    clearInterval(this.screenshotPollingInterval)
+    this.screenshotPollingInterval = undefined
   }
 
-  /**
-   * Starts garbage collection for stale tasks
-   * Runs periodically to mark tasks that haven't been reported in >24 hours as FAILED
-   */
-  private startGarbageCollection() {
-    logger.info(`Starting garbage collection at ${this.GC_INTERVAL_MS / 1000}s interval`)
-
-    // Run GC immediately on startup
-    this.runGarbageCollection()
-
-    // Then run periodically
-    this.gcIntervalId = setInterval(() => {
-      this.runGarbageCollection()
-    }, this.GC_INTERVAL_MS)
+  public createStream() {
+    let controller: ReadableStreamDefaultController<Uint8Array>
+    return new ReadableStream<Uint8Array>({
+      start: (c) => {
+        controller = c
+        this.streams.add(controller)
+        logger.info(`Added stream controller. Active streams: ${this.streams.size}`)
+        // Start screenshot polling if this is the first stream
+        if (this.streams.size === 1) this.startScreenshotPolling()
+      },
+      cancel: () => {
+        logger.info(`Closing mjpeg stream controller. Active streams: ${this.streams.size}`)
+        if (!controller) return
+        this.streams.delete(controller)
+        if (this.streams.size === 0) this.stopScreenshotPolling()
+      },
+    })
   }
 
-  /**
-   * Stops garbage collection interval
-   */
-  private stopGarbageCollection() {
-    if (!this.gcIntervalId) return
-
-    logger.info('Stopping garbage collection')
-    clearInterval(this.gcIntervalId)
-    this.gcIntervalId = undefined
-  }
-
-  /**
-   * Performs garbage collection on stale tasks
-   * Marks tasks that have been running for >24 hours as FAILED
-   * Public for testing purposes
-   */
-  public runGarbageCollection() {
-    const now = getNow()
-    const tasks = Array.from(this.tasks.values())
-    let staleCount = 0
-
-    for (const task of tasks) {
-      // Skip immediate tasks and already completed tasks
-      if (task.immediate || task.stage === 'DONE') continue
-
-      // Check if task has been running for too long
-      if (task.stage === 'RUNNING' && task.startedAt) {
-        const durationMs = now.since(task.startedAt).total('milliseconds')
-        if (durationMs > this.TASK_TIMEOUT_MS) {
-          const durationHours = this.formatDurationHours(durationMs)
-          logger.warn(
-            `Garbage collection: Task ${task.id} has been running for ${durationHours}h, marking as FAILED`,
-          )
-          this.markTaskAsStale(task, now, 'Task timed out after 24 hours (running)')
-          staleCount++
-        }
-      }
-
-      // Check if task has been pending for too long (unlikely but possible)
-      if (task.stage === 'PENDING') {
-        const durationMs = now.since(task.createdAt).total('milliseconds')
-        if (durationMs > this.TASK_TIMEOUT_MS) {
-          const durationHours = this.formatDurationHours(durationMs)
-          logger.warn(
-            `Garbage collection: Task ${task.id} has been pending for ${durationHours}h, marking as FAILED`,
-          )
-          this.markTaskAsStale(task, now, 'Task timed out after 24 hours (pending)')
-          staleCount++
-        }
-      }
-    }
-
-    if (staleCount > 0) {
-      logger.info(`Garbage collection: Marked ${staleCount} stale task(s) as FAILED`)
-    } else {
-      logger.debug('Garbage collection: No stale tasks found')
-    }
-  }
-
-  /**
-   * Helper to format duration in milliseconds to hours
-   */
-  private formatDurationHours(durationMs: number): number {
-    return Math.round(durationMs / 1000 / 60 / 60)
-  }
-
-  /**
-   * Helper to mark a task as stale and update its status
-   */
-  private markTaskAsStale(task: Task, now: Temporal.ZonedDateTime, reason: string) {
-    task.stage = 'DONE'
-    task.status = 'FAILED'
-    task.completedAt = now
-    task.emit('DONE', task)
-    task.log(reason)
-
-    // Remove from queue if present
-    this.queue = this.queue.filter((t) => t.id !== task.id)
-    this.emit('taskCompleted', task.data)
-
-    // Update in database
-    if (!task.immediate) {
-      dbService.updateTask(task.data, this.device).catch((error) => {
-        logger.error(`Failed to update task ${task.id} in database:`, error)
-      })
-    }
-  }
-
-  public async *listen<K extends MaaManagerEventKey>(
+  public async *listen<K extends keyof MaaManagerEventMap>(
     event: K,
     options?: Parameters<typeof EventEmitter.on>[2],
   ) {
@@ -895,22 +594,5 @@ export class MaaManager extends EventEmitter<MaaManagerEventMap> {
       yield arg as MaaManagerEventMap[K][0]
     }
     logger.debug(`Client unsubscribed from ${event}`)
-  }
-
-  /**
-   * Cleanup method to stop all intervals and timers
-   * Should be called when manager is being destroyed
-   */
-  public cleanup() {
-    this.stopScreenshotPolling()
-    this.stopGarbageCollection()
-    this.scheduler.stop()
-
-    if (this.unlockTimerId) {
-      clearTimeout(this.unlockTimerId)
-      this.unlockTimerId = undefined
-    }
-
-    logger.info(`Manager ${this.device} cleaned up`)
   }
 }

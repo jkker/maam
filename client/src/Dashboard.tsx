@@ -1,6 +1,6 @@
 import type { TaskData } from '@maam/server'
 
-import { TASK_TYPE } from '@maam/server/const'
+import { TASK_TYPE, STAGE_OPTIONS } from '@maam/server/const'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { useSubscription } from '@trpc/tanstack-react-query'
 
@@ -19,7 +19,7 @@ import {
   UnlockIcon,
 } from 'lucide-react'
 
-import React, { useState } from 'react'
+import { useState } from 'react'
 import { toast } from 'sonner'
 import { Temporal } from 'temporal-polyfill'
 
@@ -59,46 +59,12 @@ import { ButtonGroup } from './components/ui/button-group'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './components/ui/card'
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from './components/ui/empty'
 import { Field, FieldLabel } from './components/ui/field'
-import { Progress } from './components/ui/progress'
 import { ScrollArea } from './components/ui/scroll-area'
 import { Skeleton } from './components/ui/skeleton'
 import { Spinner } from './components/ui/spinner'
-import { useScreenshotProgress } from './hooks/useScreenshotProgress'
 import { Footer, Header } from './Layout'
 import { invalidateQueries, trpc } from './lib/trpc'
 import { cn, formatDuration, formatTaskType, formatTime } from './utils'
-
-// Stage selection data with availability by weekday
-interface StageOption {
-  id: string
-  label: string
-  weekdays?: number[] // 1=Monday, 7=Sunday; empty means all days
-}
-
-const STAGE_OPTIONS: StageOption[] = [
-  { id: 'default', label: '当前/上次' },
-  // 主线关卡
-  { id: '1-7', label: '固源岩' },
-  { id: 'R8-11', label: '晶体元件' },
-  { id: '12-17-HARD', label: '化合切削液' },
-  // 资源本
-  { id: 'CE-6', label: '龙门币', weekdays: [2, 4, 6, 7] },
-  { id: 'AP-5', label: '红票', weekdays: [1, 4, 6, 7] },
-  { id: 'CA-5', label: '技能', weekdays: [2, 3, 5, 7] },
-  { id: 'LS-6', label: '经验' },
-  { id: 'SK-5', label: '碳', weekdays: [1, 3, 5, 6] },
-  // 剿灭模式
-  { id: 'Annihilation', label: '剿灭模式' },
-  // 芯片本
-  { id: 'PR-A-1', label: '奶/盾芯片', weekdays: [1, 4, 5, 7] },
-  { id: 'PR-A-2', label: '奶/盾芯片组', weekdays: [1, 4, 5, 7] },
-  { id: 'PR-B-1', label: '术/狙芯片', weekdays: [1, 2, 5, 6] },
-  { id: 'PR-B-2', label: '术/狙芯片组', weekdays: [1, 2, 5, 6] },
-  { id: 'PR-C-1', label: '先/辅芯片', weekdays: [3, 4, 6, 7] },
-  { id: 'PR-C-2', label: '先/辅芯片组', weekdays: [3, 4, 6, 7] },
-  { id: 'PR-D-1', label: '近/特芯片', weekdays: [2, 3, 6, 7] },
-  { id: 'PR-D-2', label: '近/特芯片组', weekdays: [2, 3, 6, 7] },
-]
 
 export default function Dashboard() {
   const {
@@ -348,52 +314,39 @@ function QuickActions({ locked, connected }: { locked: boolean; connected: boole
 }
 
 function ScreenshotViewer({ className }: { className?: string }) {
-  const { data: { screenshot, timestamp, interval } = {}, status } = useSubscription(
-    trpc.screenshot.subscriptionOptions(),
-  )
+  const [imageError, setImageError] = useState(false)
+  const [isLoading, setIsLoading] = useState(true)
 
   return (
     <Card className={cn('aspect-video overflow-hidden flex flex-col py-0 relative', className)}>
       {/* Screenshot display area */}
       <div className="flex-1 grid place-items-center-safe">
-        {screenshot ? (
-          <img
-            src={`data:image/png;base64,${screenshot}`}
-            alt="Live screenshot"
-            className="w-full h-full object-contain"
-          />
-        ) : status === 'pending' ? (
-          <Skeleton className="w-full h-full grid place-items-center">
+        {isLoading && (
+          <Skeleton className="w-full h-full grid place-items-center absolute">
             <Spinner className="size-4" />
           </Skeleton>
-        ) : (
+        )}
+        {imageError ? (
           <Empty>
             <EmptyHeader>
               <EmptyTitle>No screenshot available</EmptyTitle>
             </EmptyHeader>
             <EmptyDescription>Device is offline</EmptyDescription>
           </Empty>
+        ) : (
+          <img
+            src="/maa/screenshot.mjpeg"
+            alt="Live screenshot"
+            className="w-full h-full object-contain"
+            onLoad={() => setIsLoading(false)}
+            onError={() => {
+              setIsLoading(false)
+              setImageError(true)
+            }}
+          />
         )}
       </div>
-      {screenshot && <ScreenshotProgressBar interval={interval} timestamp={timestamp} />}
     </Card>
-  )
-}
-
-const ScreenshotProgressBar = ({
-  timestamp,
-  interval,
-}: {
-  interval?: number
-  timestamp?: string
-}) => {
-  const { estimatedInterval, progress } = useScreenshotProgress(timestamp, interval)
-
-  if (!estimatedInterval) return null
-  return (
-    <div className="absolute bottom-0 left-0 right-0">
-      <Progress value={progress} className="opacity-50 h-0.5 bg-gray-500/50 backdrop-blur-2xl" />
-    </div>
   )
 }
 

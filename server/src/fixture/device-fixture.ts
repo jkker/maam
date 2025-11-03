@@ -3,7 +3,7 @@
  * Simulates a MAA device polling the server for tasks and reporting status
  */
 
-import type { TaskType } from './lib/schema'
+import type { TaskType } from '../lib/schema'
 
 export interface DeviceFixtureConfig {
   device: string

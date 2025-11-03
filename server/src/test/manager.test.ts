@@ -393,30 +393,6 @@ describe('MaaManager with Device Fixture', () => {
     })
   })
 
-  describe('Screenshot Polling', () => {
-    it('should emit screenshot events', async () => {
-      fixture.startPolling()
-
-      const screenshotPromise = new Promise((resolve) => {
-        manager.once('screenshot', (snapshot) => {
-          resolve(snapshot)
-        })
-      })
-
-      // Trigger screenshot task
-      manager.create('CaptureImageNow')
-
-      const snapshot = await Promise.race([
-        screenshotPromise,
-        new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 3000)),
-      ])
-
-      expect(snapshot).toBeDefined()
-
-      fixture.stopPolling()
-    })
-  })
-
   describe('State Management', () => {
     it('should return correct manager state', () => {
       manager.create('LinkStart')
