@@ -1,6 +1,5 @@
-import type { TaskData } from '@maam/server'
-
-import { TASK_TYPE, STAGE_OPTIONS } from '@maam/server/const'
+import { type TaskData } from '@maam/server'
+import { STAGE_OPTIONS } from '@maam/server/const'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { useSubscription } from '@trpc/tanstack-react-query'
 
@@ -263,7 +262,19 @@ function QuickActions({ locked, connected }: { locked: boolean; connected: boole
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent>
-            {TASK_TYPE.map((task) => (
+            {(
+              [
+                'LinkStart-Base',
+                'LinkStart-WakeUp',
+                'LinkStart-Combat',
+                'LinkStart-Recruiting',
+                'LinkStart-Mall',
+                'LinkStart-Mission',
+                'LinkStart-AutoRoguelike',
+                'LinkStart-Reclamation',
+                'HeartBeat',
+              ] as const
+            ).map((task) => (
               <DropdownMenuItem key={task} onSelect={() => dispatch.mutate({ task })}>
                 {formatTaskType(task)}
               </DropdownMenuItem>
@@ -459,18 +470,6 @@ function TaskItem({
           <div>
             <span className="text-gray-500 dark:text-gray-400">Params:</span>
             <p className="text-gray-900 dark:text-white break-all">{params}</p>
-          </div>
-        )}
-        {createdAt && (
-          <div>
-            <span className="text-gray-500 dark:text-gray-400">Created:</span>
-            <p className="text-gray-900 dark:text-white">{formatTime(createdAt)}</p>
-          </div>
-        )}
-        {startedAt && (
-          <div>
-            <span className="text-gray-500 dark:text-gray-400">Started:</span>
-            <p className="text-gray-900 dark:text-white">{formatTime(startedAt)}</p>
           </div>
         )}
         {completedAt && (

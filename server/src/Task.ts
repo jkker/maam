@@ -20,6 +20,7 @@ export class Task extends EventEmitter<Record<TaskStage, [Task]>> {
   public createdAt: Temporal.ZonedDateTime
   public startedAt?: Temporal.ZonedDateTime
   public completedAt?: Temporal.ZonedDateTime
+  public logs?: string
   /**
    * Creates a new task and primes it for dispatching.
    * @param id - Unique identifier representing the Maa task instance.
@@ -77,6 +78,7 @@ export class Task extends EventEmitter<Record<TaskStage, [Task]>> {
       startedAt,
       completedAt,
       duration,
+      logs,
     } = this
     return {
       id,
@@ -88,6 +90,7 @@ export class Task extends EventEmitter<Record<TaskStage, [Task]>> {
       ...(payload && { payload }),
       ...(startedAt && { startedAt: startedAt.toString(), duration }),
       ...(completedAt && { completedAt: completedAt.toString() }),
+      ...(logs && { logs }),
     }
   }
   /**
