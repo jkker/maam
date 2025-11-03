@@ -5,9 +5,8 @@
 import { serve } from '@hono/node-server'
 
 import { MaaDeviceFixture } from './device-fixture'
-import { logger } from './lib/logger'
-
-import app, { manager } from './index'
+import app, { manager } from '../index'
+import { logger } from '../lib/logger'
 
 const PORT = 3113
 const FIXTURE_POLLING_INTERVAL = 2000 // 2 seconds

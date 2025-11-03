@@ -1,3 +1,6 @@
+import type { TaskData } from './Task'
+import type { ScheduleData } from './TaskSchedule'
+
 import { serveStatic } from '@hono/node-server/serve-static'
 import { trpcServer } from '@hono/trpc-server'
 import { zValidator } from '@hono/zod-validator'
@@ -5,15 +8,14 @@ import { initTRPC } from '@trpc/server'
 import { Hono } from 'hono'
 import { compress } from 'hono/compress'
 import { logger as loggerMiddleware } from 'hono/logger'
-import { mimes } from 'hono/utils/mime'
 import { z } from 'zod'
 
-import { DEFAULT_USER, DEFAULT_DEVICE, TASK_TYPE } from './const'
+import { DEFAULT_USER, DEFAULT_DEVICE, TASK_TYPE, MJPEG_BOUNDARY } from './const'
 import { initDatabase } from './lib/db'
 import { DEBUG, logger } from './lib/logger'
 import { fetchUpcomingEvents } from './lib/prts.wiki'
 import { reportSchema, scheduleSchema } from './lib/schema'
-import { MaaManager, MJPEG_BOUNDARY, type ScheduleData, type TaskData } from './MaaManager'
+import { MaaManager } from './MaaManager'
 // Initialize database
 initDatabase()
 
@@ -100,40 +102,7 @@ export type TRPCRouter = typeof router
 export const app = new Hono<{ Variables: VariablesContext }>()
   .use(compress())
   .use('/trpc/*', trpcServer({ router, createContext: () => ({ manager }) }))
-  // MJPEG screenshot stream endpoint
-  .get('/screenshot-stream', (c) => {
-    logger.info('New MJPEG stream connection')
 
-    let streamController: ReadableStreamDefaultController<Uint8Array> | null = null
-
-    const stream = new ReadableStream({
-      start(controller) {
-        // Store reference for cleanup
-        streamController = controller
-
-        // Register this controller with the manager
-        manager.addStreamController(controller)
-
-        // Send initial boundary
-        const initialBoundary = new TextEncoder().encode(`${MJPEG_BOUNDARY}\r\n`)
-        controller.enqueue(initialBoundary)
-      },
-      cancel() {
-        logger.info('MJPEG stream connection closed')
-        // Properly clean up the controller
-        if (streamController) {
-          manager.removeStreamController(streamController)
-          streamController = null
-        }
-      },
-    })
-
-    return c.body(stream, 200, {
-      'Content-Type': `multipart/x-mixed-replace;boundary=${MJPEG_BOUNDARY}`,
-      'Cache-Control': 'no-cache',
-      'Connection': 'keep-alive',
-    })
-  })
   // MAA remote control protocol endpoints
   // https://docs.maa.plus/zh-cn/protocol/remote-control-schema.html#获取任务端点
   .post('/maa/getTask', (c) => {
@@ -171,18 +140,22 @@ export const app = new Hono<{ Variables: VariablesContext }>()
       return c.json({ success: false, error: JSON.stringify(error) }, 500)
     }
   })
-  // task control endpoints
-  .get('/maa/screenshot', async (c) => {
-    const { id, payload } = await manager.create('CaptureImageNow').waitFor('DONE')
-    if (!payload) return c.json({ error: 'Failed to capture screenshot' }, 500)
-
-    const image = Buffer.from(payload, 'base64')
-    manager.tasks.delete(id)
+  // Screenshot endpoints
+  .get('/maa/screenshot.jpg', async (c) => {
+    const image = await manager.getScreenshotJPEG()
     return c.body(image, 200, {
-      'Content-Type': mimes.png,
+      'Content-Type': 'image/jpeg',
       'Content-Length': image.length.toString(),
     })
   })
+  // MJPEG screenshot stream endpoint
+  .get('/maa/screenshot.mjpeg', (c) =>
+    c.body(manager.createStream(), 200, {
+      'Content-Type': `multipart/x-mixed-replace;boundary=${MJPEG_BOUNDARY}`,
+      'Cache-Control': 'no-cache',
+      Connection: 'keep-alive',
+    }),
+  )
   // management endpoints
   .get('/maa/lock', async (c) => c.text((await manager.lock()).message))
   .get('/maa/unlock', (c) => {

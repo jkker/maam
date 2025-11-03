@@ -1,3 +1,4 @@
 import 'temporal-polyfill/global'
 
-export const getNow = () => Temporal.Now.instant().toZonedDateTimeISO(Temporal.Now.timeZoneId())
+export const getNow = (tz = Temporal.Now.timeZoneId()) =>
+  Temporal.Now.instant().toZonedDateTimeISO(tz)

@@ -1,4 +1,5 @@
-import type { TaskData, ScheduleData } from '../../MaaManager'
+import type { TaskData } from '../../Task'
+import type { ScheduleData } from '../../TaskSchedule'
 
 import { eq, desc } from 'drizzle-orm'
 

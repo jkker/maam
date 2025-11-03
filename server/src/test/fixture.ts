@@ -1,6 +1,7 @@
 import type { TaskType } from '../lib/schema'
 
-import { MaaManager, Task } from '../MaaManager'
+import { MaaManager } from '../MaaManager'
+import { Task } from '../Task'
 
 /**
  * Mock MAA device fixture for testing

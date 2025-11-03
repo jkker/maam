@@ -57,29 +57,11 @@ describe('MJPEG Screenshot Stream', () => {
   })
 
   it('should return proper MJPEG headers', async () => {
-    const res = await app.request('/screenshot-stream')
+    const res = await app.request('/maa/screenshot.mjpeg')
 
     expect(res.status).toBe(200)
-    expect(res.headers.get('Content-Type')).toBe(
-      'multipart/x-mixed-replace;boundary=--boundarystring',
-    )
+    expect(res.headers.get('Content-Type')).toBe('multipart/x-mixed-replace;boundary=--bound')
     expect(res.headers.get('Cache-Control')).toBe('no-cache')
     expect(res.headers.get('Connection')).toBe('keep-alive')
-  })
-
-  it('should add and remove stream controllers', () => {
-    const mockController = {
-      enqueue: () => {},
-    } as ReadableStreamDefaultController<Uint8Array>
-
-    expect(manager['streamControllers'].size).toBe(0)
-
-    manager.addStreamController(mockController)
-    expect(manager['streamControllers'].size).toBe(1)
-    expect(manager['screenshotIntervalId']).toBeDefined()
-
-    manager.removeStreamController(mockController)
-    expect(manager['streamControllers'].size).toBe(0)
-    expect(manager['screenshotIntervalId']).toBeUndefined()
   })
 })

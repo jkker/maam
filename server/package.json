@@ -6,7 +6,6 @@
     "dev": "vite",
     "build": "vite build",
     "start": "node ./dist/server.js",
-    "start:test": "node ./dist/test-server.js",
     "test:e2e": "vitest run",
     "typecheck": "tsc -b --noEmit"
   },
