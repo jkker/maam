@@ -27,7 +27,8 @@
       "@/*": ["./src/*"],
       "@/components/*": ["./src/components/*"],
       "@maam/server": ["../server/src"],
-      "@maam/server/schema": ["../server/src/lib/schema"]
+      "@maam/server/schema": ["../server/src/lib/schema"],
+      "@maam/server/lib/*": ["../server/src/lib/*"]
     }
   },
   "include": ["src"]

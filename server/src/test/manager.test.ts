@@ -236,8 +236,7 @@ describe('MaaManager with Device Fixture', () => {
       // Schedule unlock with 1 second delay for testing
       const result = manager.scheduleUnlock({ seconds: 1 })
 
-      expect(result.scheduledFor).toBeDefined()
-      expect(result.delayDuration.total('milliseconds')).toBe(1000)
+      expect(result.split('（')[0]).toMatchInlineSnapshot(`"MAA将在1s后出笼"`)
       expect(manager.locked).toBe(true) // Should still be locked
 
       // Wait for the unlock to execute

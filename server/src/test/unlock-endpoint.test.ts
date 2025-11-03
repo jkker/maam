@@ -58,7 +58,7 @@ describe('HTTP Unlock Endpoint', () => {
 
     // Call scheduleUnlock directly to test behavior
     const result = manager.scheduleUnlock({ minutes: 10 })
-    expect(result.delayDuration.total('minutes')).toBe(10)
+    expect(result.split('（')[0]).toMatchInlineSnapshot(`"MAA将在10m后出笼"`)
 
     // Manager should still be locked immediately after request
     expect(manager.locked).toBe(true)
@@ -81,7 +81,7 @@ describe('HTTP Unlock Endpoint', () => {
 
     // Schedule unlock with 5 minute delay
     const result = manager.scheduleUnlock({ minutes: 5 })
-    expect(result.delayDuration.total('minutes')).toBe(5)
+    expect(result.split('（')[0]).toMatchInlineSnapshot(`"MAA将在5m后出笼"`)
 
     // Manager should still be locked
     expect(manager.locked).toBe(true)

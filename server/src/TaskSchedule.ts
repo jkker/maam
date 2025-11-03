@@ -9,7 +9,6 @@ export class TaskSchedule extends CronJob {
   readonly id: string
   public lastRunTime?: Temporal.ZonedDateTime
   public runCount: number = 0
-
   public cooldownUntil?: Temporal.ZonedDateTime
 
   constructor(
@@ -56,14 +55,6 @@ export class TaskSchedule extends CronJob {
       ...(this.lastRunTime && { lastRunTime: this.lastRunTime.toString() }),
       ...(this.runCount && { runCount: this.runCount }),
     }
-  }
-
-  get nextRunTime() {
-    const t = getNow()
-    const next = t.withPlainTime({ hour: this.hour, minute: this.minute })
-    // If time has passed today, schedule for tomorrow
-    if (Temporal.ZonedDateTime.compare(next, t) <= 0) return next.add({ days: 1 })
-    return next
   }
 }
 

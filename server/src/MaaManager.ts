@@ -8,7 +8,7 @@ import { ToadScheduler } from 'toad-scheduler'
 import { MJPEG_BOUNDARY, T } from './const'
 import { dbService } from './lib/db/service'
 import { logger } from './lib/logger'
-import { getNow } from './lib/temporal'
+import { formatDuration, formatTime, getNow } from './lib/temporal'
 import { Task, type TaskData } from './Task'
 import { TaskSchedule } from './TaskSchedule'
 
@@ -70,7 +70,9 @@ export class MaaManager extends EventEmitter<MaaManagerEventMap> {
     // Start garbage collection for stale tasks
     // this.startGarbageCollection()
   }
-
+  get now() {
+    return getNow(this.tz)
+  }
   /**
    * Initialize database and restore state from database
    */
@@ -138,9 +140,9 @@ export class MaaManager extends EventEmitter<MaaManagerEventMap> {
       return runningDuplicate
     }
 
-    const now = getNow(this.tz)
+    const { now } = this
 
-    const task = new Task(`${type}|${now.toString()}`, type, params)
+    const task = new Task(type, now, params)
     this.tasks.set(task.id, task)
     this.queue.push(task)
 
@@ -283,7 +285,7 @@ export class MaaManager extends EventEmitter<MaaManagerEventMap> {
    */
   public async unlock(cooldown: Temporal.DurationLike = { minutes: 10 }): Promise<UnlockResult> {
     this.locked = false
-    this.unlockTime = getNow()
+    this.unlockTime = this.now
     const { schedules } = this
     logger.info(`Manager unlocked. Resumed ${schedules.length} schedules.`)
 
@@ -310,7 +312,14 @@ export class MaaManager extends EventEmitter<MaaManagerEventMap> {
       schedule.start()
 
       // Calculate next run time for this schedule
-      const { nextRunTime } = schedule
+      let nextRunTime = this.unlockTime.withPlainTime({
+        hour: schedule.hour,
+        minute: schedule.minute,
+      })
+      // If time has passed today, schedule for tomorrow
+      if (Temporal.ZonedDateTime.compare(nextRunTime, this.unlockTime) <= 0)
+        nextRunTime = nextRunTime.add({ days: 1 })
+
       const durationUntil = this.unlockTime.until(nextRunTime)
       const affectedByCooldown = Temporal.ZonedDateTime.compare(nextRunTime, cooldownEnd) < 0
 
@@ -352,23 +361,21 @@ export class MaaManager extends EventEmitter<MaaManagerEventMap> {
    * @param delay - Duration to wait before unlocking (default: 10 minutes)
    * @returns Information about when the unlock will occur
    */
-  public scheduleUnlock(delay: Temporal.DurationLike = { minutes: 10 }): {
-    scheduledFor: Temporal.ZonedDateTime
-    delayDuration: Temporal.Duration
-  } {
-    // Cancel existing unlock timer if any
+  public scheduleUnlock(delay: Temporal.DurationLike = { minutes: 10 }) {
+    if (!this.locked) return 'MAA已经在外面溜达了。'
+
     if (this.unlockTimerId) {
       clearTimeout(this.unlockTimerId)
       logger.info('Cancelled previous delayed unlock')
     }
 
-    const now = getNow()
-    const delayDuration = Temporal.Duration.from(delay)
-    const scheduledFor = now.add(delayDuration)
-    this.unlockScheduledFor = scheduledFor
+    const { now } = this
+    const duration = Temporal.Duration.from(delay)
+    const due = now.add(duration)
+    this.unlockScheduledFor = due
 
-    const delayMs = delayDuration.total('milliseconds')
-    logger.info(`Scheduling unlock for ${scheduledFor.toString()} (in ${delayDuration.toString()})`)
+    const delayMs = duration.total('milliseconds')
+    logger.info(`Scheduling unlock for ${due.toString()} (in ${duration.toString()})`)
 
     this.unlockTimerId = setTimeout(async () => {
       logger.info('Executing delayed unlock')
@@ -377,7 +384,7 @@ export class MaaManager extends EventEmitter<MaaManagerEventMap> {
       await this.unlock()
     }, delayMs)
 
-    return { scheduledFor, delayDuration }
+    return `MAA将在${formatDuration(duration)}后出笼（${formatTime(due)}）。`
   }
 
   /**
@@ -398,17 +405,6 @@ export class MaaManager extends EventEmitter<MaaManagerEventMap> {
     return Array.from(this.tasks.values())
       .filter((t) => !t.immediate)
       .map(({ data }) => data)
-  }
-
-  /**
-   * Gets the currently running task (if any)
-   * @returns The running task data or undefined
-   */
-  public getRunningTask(): TaskData | undefined {
-    const runningTask = Array.from(this.tasks.values()).find(
-      (t) => t.stage === 'RUNNING' && !t.immediate,
-    )
-    return runningTask?.data
   }
 
   public deviceLog(text: string) {
@@ -432,7 +428,7 @@ export class MaaManager extends EventEmitter<MaaManagerEventMap> {
     logger.info(`Received MAA Log:\n`, text)
 
     // Persist device log to database (async, non-blocking)
-    const timestamp = getNow().toString()
+    const timestamp = this.now.toString()
     dbService.saveDeviceLog(this.device, timestamp, 'Device Log', text).catch((error) => {
       logger.error(`Failed to save device log to database:`, error)
     })
@@ -449,7 +445,7 @@ export class MaaManager extends EventEmitter<MaaManagerEventMap> {
     if (!task) return
 
     task.stage = 'DONE'
-    task.completedAt = getNow()
+    task.completedAt = this.now
     if (payload) task.payload = payload
     if (status) task.status = status
 
@@ -471,7 +467,7 @@ export class MaaManager extends EventEmitter<MaaManagerEventMap> {
   public getTask() {
     const tasks = this.queue.map((task) => {
       task.stage = 'RUNNING'
-      task.startedAt = getNow()
+      task.startedAt = this.now
       task.emit('RUNNING', task)
       task.log()
 
@@ -512,7 +508,7 @@ export class MaaManager extends EventEmitter<MaaManagerEventMap> {
       try {
         const buffer = await this.getScreenshotJPEG()
         // Write JPEG frame to all active stream controllers
-        if (this.streams.size === 0) return
+        if (this.streams.size === 0) return this.stopScreenshotPolling()
 
         // Writes a JPEG frame to all active stream controllers with proper multipart formatting
         const encoder = new TextEncoder()

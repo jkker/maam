@@ -17,7 +17,6 @@ export class Task extends EventEmitter<Record<TaskStage, [Task]>> {
   public payload?: string
   public status?: 'SUCCESS' | 'FAILED' | 'CANCELLED'
   public stage: TaskStage = 'PENDING'
-  public createdAt: Temporal.ZonedDateTime
   public startedAt?: Temporal.ZonedDateTime
   public completedAt?: Temporal.ZonedDateTime
   public logs?: string
@@ -28,12 +27,12 @@ export class Task extends EventEmitter<Record<TaskStage, [Task]>> {
    * @param params - Optional Maa task payload originating from the controller request.
    */
   constructor(
-    public id: string,
     public type: TaskType,
+    public createdAt: Temporal.ZonedDateTime,
     public params: string | undefined = undefined,
+    public id = `${type}|${createdAt.toString()}`,
   ) {
     super()
-    this.createdAt = getNow()
   }
 
   static RunError = class TaskRunError extends Error {

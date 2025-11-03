@@ -1,4 +1,5 @@
-import { type TaskData } from '@maam/server'
+import type { TaskData } from '@maam/server'
+
 import { STAGE_OPTIONS } from '@maam/server/const'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { useSubscription } from '@trpc/tanstack-react-query'

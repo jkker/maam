@@ -34,20 +34,12 @@ export const router = t.router({
   // Manager control procedures
   start: t.procedure.mutation(async ({ ctx: { manager } }) => manager.start()),
   stop: t.procedure.mutation(async ({ ctx: { manager } }) => manager.stop()),
+  // Lock control procedures
   locked: t.procedure.query(({ ctx: { manager } }) => manager.locked),
   toggleLock: t.procedure
     .input(z.boolean())
     .mutation(async ({ ctx: { manager }, input }) => (input ? manager.lock() : manager.unlock())),
 
-  // Schedule management procedures
-  schedules: t.procedure.query(({ ctx: { manager } }) => manager.schedules.map((s) => s.data)),
-  addSchedule: t.procedure.input(scheduleSchema).mutation(({ ctx: { manager }, input }) => {
-    const schedule = manager.addSchedule(input)
-    return { success: true, message: 'Schedule created', schedule }
-  }),
-  removeSchedule: t.procedure
-    .input(z.string())
-    .mutation(({ ctx: { manager }, input }) => manager.removeSchedule(input)),
   schedule: {
     get: t.procedure.query(({ ctx: { manager } }) => manager.schedules.map((s) => s.data)),
     add: t.procedure
@@ -78,13 +70,6 @@ export const router = t.router({
    * Emits task data whenever task state changes
    */
   tasks: t.procedure.subscription(({ ctx, signal }) => ctx.manager.listen('update', { signal })),
-  runningTask: t.procedure.query(({ ctx: { manager } }) => manager.getRunningTask()),
-
-  screenshotQuery: t.procedure.query(async ({ ctx }) => {
-    const { payload } = await ctx.manager.create('CaptureImageNow').waitFor('DONE')
-    if (!payload) throw new Error('Failed to capture screenshot')
-    return payload
-  }),
 
   deviceLog: t.procedure.subscription(async function* ({ ctx, signal }) {
     yield ctx.manager.logs.slice(-50)
@@ -158,23 +143,11 @@ export const app = new Hono<{ Variables: VariablesContext }>()
   )
   // management endpoints
   .get('/maa/lock', async (c) => c.text((await manager.lock()).message))
-  .get('/maa/unlock', (c) => {
-    // Parse delay parameter (in minutes), default to 10 minutes
-    const delayMinutes = Number(c.req.query('delay')) || 10
-    const delay = { minutes: delayMinutes }
-
-    if (manager.locked) {
-      const { scheduledFor, delayDuration } = manager.scheduleUnlock(delay)
-      const { hours, minutes } = delayDuration
-      let message = `MAA将在`
-      if (hours > 0) message += `${hours}小时`
-      if (minutes > 0) message += `${minutes}分钟`
-      message += `后出笼（${scheduledFor.toPlainTime().toString({ smallestUnit: 'minute' })}）。`
-      return c.text(message)
-    } else {
-      return c.text('MAA已经在外面溜达了。')
-    }
-  })
+  .get(
+    '/maa/unlock',
+    zValidator('query', z.object({ delay: z.number().optional().default(10) })),
+    (c) => c.text(manager.scheduleUnlock({ minutes: c.req.valid('query').delay })),
+  )
 
 // In development, redirect all other routes to the Vite dev server
 if (import.meta.env.DEV) app.get('*', (c) => c.redirect('http://localhost:3113'))
