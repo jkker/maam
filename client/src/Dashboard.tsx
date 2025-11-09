@@ -48,6 +48,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 
 import { ScheduleManager } from './components/ScheduleManager'
 import { TaskStatusBadge } from './components/task-status-badge'
+import { UserMenu } from './components/UserMenu'
 
 import {
   Accordion,
@@ -82,11 +83,14 @@ export default function Dashboard() {
   return (
     <>
       <Header>
-        <ConnectivityStatusIndicator
-          isError={isError}
-          isPending={isPending}
-          isFetching={isFetching}
-        />
+        <div className="flex items-center gap-2">
+          <ConnectivityStatusIndicator
+            isError={isError}
+            isPending={isPending}
+            isFetching={isFetching}
+          />
+          <UserMenu />
+        </div>
       </Header>
       <main className="flex-1 container mx-auto p-4 max-w-7xl grid grid-cols-1 md:grid-cols-6 lg:grid-cols-12 gap-4 auto-rows-min">
         {locked && (

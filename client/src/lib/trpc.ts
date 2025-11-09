@@ -7,6 +7,30 @@ import { createTRPCOptionsProxy } from '@trpc/tanstack-react-query'
 const url = '/trpc'
 
 export const queryClient = new QueryClient()
+
+/**
+ * Get auth headers from localStorage
+ */
+function getAuthHeaders() {
+  try {
+    const authStorage = localStorage.getItem('maam-auth-storage')
+    if (!authStorage) return {}
+
+    const parsed = JSON.parse(authStorage)
+    const state = parsed?.state
+
+    if (state?.userId && state?.deviceId) {
+      return {
+        'x-user-id': state.userId,
+        'x-device-id': state.deviceId,
+      }
+    }
+  } catch (error) {
+    console.error('Failed to get auth headers:', error)
+  }
+  return {}
+}
+
 /**
  * Create tRPC React Query hooks
  */
@@ -14,8 +38,14 @@ export const trpcClient = createTRPCClient<TRPCRouter>({
   links: [
     splitLink({
       condition: (op) => op.type === 'subscription',
-      true: httpSubscriptionLink({ url }),
-      false: httpBatchLink({ url }),
+      true: httpSubscriptionLink({
+        url,
+        connectionParams: () => getAuthHeaders(),
+      }),
+      false: httpBatchLink({
+        url,
+        headers: () => getAuthHeaders(),
+      }),
     }),
   ],
 })
