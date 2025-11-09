@@ -34,14 +34,6 @@ export const T = {
 
 export const ARKNIGHTS_TIME_ZONE = 'Asia/Shanghai'
 
-export const DEFAULT_DEVICE = 'bdc57941058a47e6bf56f2a993c87af3'
-export const DEFAULT_USER = 'user'
-export const DEFAULT_SCHEDULES = [
-  { type: 'LinkStart', hour: 4, timezone: ARKNIGHTS_TIME_ZONE },
-  { type: 'LinkStart', hour: 12, timezone: ARKNIGHTS_TIME_ZONE },
-  { type: 'LinkStart', hour: 20, timezone: ARKNIGHTS_TIME_ZONE },
-]
-
 export const MJPEG_BOUNDARY = '--bound'
 
 export const STAGE_OPTIONS = [

@@ -2,6 +2,32 @@ import { sql } from 'drizzle-orm'
 import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core'
 
 /**
+ * Users table - stores user information
+ */
+export const users = sqliteTable('users', {
+  id: text('id').primaryKey(),
+  name: text('name').notNull(),
+  createdAt: text('created_at')
+    .notNull()
+    .default(sql`(datetime('now'))`),
+})
+
+/**
+ * Devices table - stores device information linked to users
+ */
+export const devices = sqliteTable('devices', {
+  id: text('id').primaryKey(),
+  userId: text('user_id')
+    .notNull()
+    .references(() => users.id, { onDelete: 'cascade' }),
+  name: text('name'),
+  createdAt: text('created_at')
+    .notNull()
+    .default(sql`(datetime('now'))`),
+  lastSeen: text('last_seen'),
+})
+
+/**
  * Task history table - stores all task executions
  */
 export const tasks = sqliteTable('tasks', {

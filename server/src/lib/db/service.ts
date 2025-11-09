@@ -3,12 +3,113 @@ import type { ScheduleData } from '../../TaskSchedule'
 
 import { eq, desc } from 'drizzle-orm'
 
-import { tasks, schedules, managerState, deviceLogs } from './schema'
+import { tasks, schedules, managerState, deviceLogs, users, devices } from './schema'
 import { logger } from '../logger'
 
 import { db } from './index'
 
 export class DatabaseService {
+  /**
+   * User Operations
+   */
+  async createUser(userId: string, name: string) {
+    try {
+      await db.insert(users).values({
+        id: userId,
+        name,
+      })
+      logger.info(`User created: ${userId}`)
+      return { id: userId, name }
+    } catch (error) {
+      logger.error(`Failed to create user ${userId}:`, error)
+      throw error
+    }
+  }
+
+  async getUser(userId: string) {
+    try {
+      const results = await db.select().from(users).where(eq(users.id, userId)).limit(1)
+      return results[0]
+    } catch (error) {
+      logger.error(`Failed to get user ${userId}:`, error)
+      throw error
+    }
+  }
+
+  async getUserOrCreate(userId: string, name?: string) {
+    const user = await this.getUser(userId)
+    if (user) return user
+    return this.createUser(userId, name || userId)
+  }
+
+  /**
+   * Device Operations
+   */
+  async createDevice(deviceId: string, userId: string, name?: string) {
+    try {
+      await db.insert(devices).values({
+        id: deviceId,
+        userId,
+        name: name || null,
+      })
+      logger.info(`Device created: ${deviceId} for user ${userId}`)
+      return { id: deviceId, userId, name }
+    } catch (error) {
+      logger.error(`Failed to create device ${deviceId}:`, error)
+      throw error
+    }
+  }
+
+  async getDevice(deviceId: string) {
+    try {
+      const results = await db.select().from(devices).where(eq(devices.id, deviceId)).limit(1)
+      return results[0]
+    } catch (error) {
+      logger.error(`Failed to get device ${deviceId}:`, error)
+      throw error
+    }
+  }
+
+  async getDeviceOrCreate(deviceId: string, userId: string, name?: string) {
+    const device = await this.getDevice(deviceId)
+    if (device) {
+      // Update last seen
+      await this.updateDeviceLastSeen(deviceId)
+      return device
+    }
+    return this.createDevice(deviceId, userId, name)
+  }
+
+  async updateDeviceLastSeen(deviceId: string) {
+    try {
+      await db
+        .update(devices)
+        .set({ lastSeen: new Date().toISOString() })
+        .where(eq(devices.id, deviceId))
+    } catch (error) {
+      logger.error(`Failed to update last seen for device ${deviceId}:`, error)
+    }
+  }
+
+  async getDevicesByUser(userId: string) {
+    try {
+      return await db.select().from(devices).where(eq(devices.userId, userId))
+    } catch (error) {
+      logger.error(`Failed to get devices for user ${userId}:`, error)
+      throw error
+    }
+  }
+
+  async validateDeviceOwnership(deviceId: string, userId: string): Promise<boolean> {
+    try {
+      const device = await this.getDevice(deviceId)
+      return device?.userId === userId
+    } catch (error) {
+      logger.error(`Failed to validate device ownership:`, error)
+      return false
+    }
+  }
+
   /**
    * Task Operations
    */

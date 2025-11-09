@@ -6,7 +6,6 @@ import Database from 'better-sqlite3'
 import { drizzle } from 'drizzle-orm/better-sqlite3'
 
 import * as schema from './schema'
-import { DEFAULT_DEVICE, DEFAULT_SCHEDULES } from '../../const'
 import { logger } from '../logger'
 
 const __filename = fileURLToPath(import.meta.url)
@@ -75,10 +74,6 @@ export function closeDatabase() {
 export function initDatabase() {
   getDatabase()
 
-  const isNewDatabase = !sqlite!
-    .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='schedules'")
-    .get()
-
   sqlite!.exec(`
     CREATE TABLE IF NOT EXISTS tasks (
       id TEXT PRIMARY KEY,
@@ -103,6 +98,7 @@ export function initDatabase() {
       timezone TEXT,
       last_run_time TEXT,
       run_count INTEGER NOT NULL DEFAULT 0,
+      cooldown_until TEXT,
       device TEXT NOT NULL,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
@@ -125,50 +121,28 @@ export function initDatabase() {
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
     
+    CREATE TABLE IF NOT EXISTS users (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    
+    CREATE TABLE IF NOT EXISTS devices (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      name TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      last_seen TEXT,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+    
     CREATE INDEX IF NOT EXISTS idx_tasks_device ON tasks(device);
     CREATE INDEX IF NOT EXISTS idx_tasks_created_at ON tasks(created_at);
     CREATE INDEX IF NOT EXISTS idx_schedules_device ON schedules(device);
     CREATE INDEX IF NOT EXISTS idx_device_logs_device ON device_logs(device);
     CREATE INDEX IF NOT EXISTS idx_device_logs_timestamp ON device_logs(timestamp);
+    CREATE INDEX IF NOT EXISTS idx_devices_user_id ON devices(user_id);
   `)
 
   logger.info('Database initialized')
-
-  // Seed default schedules for new databases
-  if (isNewDatabase) {
-    seedDefaultSchedules()
-  }
-}
-
-/**
- * Seed default schedules into the database
- * Called only when initializing a new database
- */
-function seedDefaultSchedules() {
-  // Check if schedules already exist for the default device
-  const existingSchedules = sqlite!
-    .prepare('SELECT COUNT(*) as count FROM schedules WHERE device = ?')
-    .get(DEFAULT_DEVICE) as { count: number }
-
-  if (existingSchedules && existingSchedules.count > 0) {
-    logger.info('Default schedules already exist, skipping seeding')
-    return
-  }
-
-  const insertSchedule = sqlite!.prepare(`
-    INSERT INTO schedules (id, type, hour, minute, timezone, run_count, device)
-    VALUES (?, ?, ?, ?, ?, 0, ?)
-  `)
-
-  for (const { type, hour, timezone } of DEFAULT_SCHEDULES) {
-    const id = `${type}|${hour}@${timezone}`
-    try {
-      insertSchedule.run(id, type, hour, 0, timezone, DEFAULT_DEVICE)
-      logger.info(`Seeded default schedule: ${id}`)
-    } catch (error) {
-      logger.warn(`Failed to seed schedule ${id}:`, error)
-    }
-  }
-
-  logger.info('Default schedules seeded')
 }
