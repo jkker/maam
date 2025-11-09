@@ -1,5 +1,17 @@
 import { cva, type VariantProps } from 'class-variance-authority'
-import { Ban, CheckCircle2, Circle, Clock, Loader2, type LucideIcon, XCircle } from 'lucide-react'
+
+import {
+  Ban,
+  CalendarClock,
+  CheckCircle2,
+  Circle,
+  Clock,
+  Loader2,
+  PauseCircle,
+  type LucideIcon,
+  XCircle,
+} from 'lucide-react'
+
 import * as React from 'react'
 
 import { cn } from '@/lib/utils'
@@ -15,6 +27,8 @@ const taskStatusBadgeVariants = cva(
         FAILED: 'border-transparent bg-red-100 text-red-800 [a&]:hover:bg-red-200',
         CANCELLED: 'border-transparent bg-gray-100 text-gray-800 [a&]:hover:bg-gray-200',
         DONE: 'border-transparent bg-purple-100 text-purple-800 [a&]:hover:bg-purple-200',
+        SCHEDULED: 'border-transparent bg-sky-100 text-sky-800 [a&]:hover:bg-sky-200',
+        POSTPONED: 'border-transparent bg-amber-100 text-amber-800 [a&]:hover:bg-amber-200',
       },
     },
     defaultVariants: {
@@ -30,6 +44,8 @@ const statusIcons: Record<string, LucideIcon> = {
   FAILED: XCircle,
   CANCELLED: Ban,
   DONE: Circle,
+  SCHEDULED: CalendarClock,
+  POSTPONED: PauseCircle,
 }
 
 interface TaskStatusBadgeProps

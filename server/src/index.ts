@@ -48,6 +48,17 @@ export const router = t.router({
     remove: t.procedure
       .input(z.string())
       .mutation(({ ctx: { manager }, input }) => manager.removeSchedule(input)),
+    postpone: t.procedure
+      .input(
+        z.object({
+          id: z.string(),
+          until: z.string().optional(),
+        }),
+      )
+      .mutation(({ ctx: { manager }, input }) => manager.postponeSchedule(input.id, input.until)),
+    resume: t.procedure
+      .input(z.string())
+      .mutation(({ ctx: { manager }, input }) => manager.resumeSchedule(input)),
   },
 
   /**

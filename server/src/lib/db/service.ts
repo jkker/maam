@@ -88,10 +88,11 @@ export class DatabaseService {
         type: scheduleData.type,
         hour: scheduleData.hour,
         minute: scheduleData.minute,
-        params: undefined, // ScheduleData doesn't have params
+        params: scheduleData.params,
         timezone: scheduleData.timezone,
         lastRunTime: scheduleData.lastRunTime,
         runCount: scheduleData.runCount || 0,
+        cooldownUntil: scheduleData.cooldownUntil,
         device,
       })
       logger.debug(`Schedule saved to database: ${scheduleData.id}`)
@@ -108,6 +109,9 @@ export class DatabaseService {
         .set({
           lastRunTime: scheduleData.lastRunTime,
           runCount: scheduleData.runCount,
+          params: scheduleData.params,
+          timezone: scheduleData.timezone,
+          cooldownUntil: scheduleData.cooldownUntil,
         })
         .where(eq(schedules.id, scheduleData.id))
       logger.debug(`Schedule updated in database: ${scheduleData.id}`)
