@@ -182,10 +182,10 @@ export const app = new Hono<{ Variables: VariablesContext }>()
     '/trpc/*',
     trpcServer({
       router,
-      createContext: (opts) => {
-        // Extract auth from headers
-        const userId = opts.req.raw.headers.get('x-user-id') || undefined
-        const deviceId = opts.req.raw.headers.get('x-device-id') || undefined
+      createContext: (opts, c) => {
+        // Extract auth from headers using Hono's context
+        const userId = c.req.header('x-user-id') || undefined
+        const deviceId = c.req.header('x-device-id') || undefined
         return { userId, deviceId }
       },
     }),

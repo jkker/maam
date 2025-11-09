@@ -2,9 +2,13 @@ import fs from 'node:fs'
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 
-import { manager } from '../index'
+import { managerService } from '../lib/managers'
 import { MaaDeviceFixture } from './fixture'
 import { initDatabase, closeDatabase } from '../lib/db'
+
+// Test credentials
+const TEST_DEVICE = 'test-device-unlock'
+const TEST_USER = 'test-user-unlock'
 
 // Helper function to clean up database files
 function cleanupTestDatabase(dbPath: string) {
@@ -19,10 +23,14 @@ function cleanupTestDatabase(dbPath: string) {
 }
 
 // Helper function to setup test environment
-function setupTestEnvironment(dbPath: string): MaaDeviceFixture {
+async function setupTestEnvironment(dbPath: string): Promise<MaaDeviceFixture> {
   process.env.DATABASE_PATH = dbPath
   cleanupTestDatabase(dbPath)
   initDatabase()
+  
+  // Get or create manager for test device
+  const manager = await managerService.getManager(TEST_DEVICE, TEST_USER)
+  
   return new MaaDeviceFixture(manager)
 }
 
@@ -30,6 +38,7 @@ function setupTestEnvironment(dbPath: string): MaaDeviceFixture {
 function cleanupTestEnvironment(fixture: MaaDeviceFixture, dbPath: string) {
   fixture.cleanup()
   try {
+    managerService.removeManager(TEST_DEVICE, TEST_USER)
     closeDatabase()
   } catch (e) {
     // Ignore errors
@@ -41,8 +50,8 @@ describe('HTTP Unlock Endpoint', () => {
   const testDbPath = `/tmp/test-maam-unlock-${Date.now()}.db`
   let fixture: MaaDeviceFixture
 
-  beforeEach(() => {
-    fixture = setupTestEnvironment(testDbPath)
+  beforeEach(async () => {
+    fixture = await setupTestEnvironment(testDbPath)
   })
 
   afterEach(() => {
@@ -51,6 +60,8 @@ describe('HTTP Unlock Endpoint', () => {
 
   it('should schedule delayed unlock with default 10 minute delay', async () => {
     fixture.startPolling()
+
+    const manager = managerService.getExistingManager(TEST_DEVICE, TEST_USER)!
 
     // Lock the manager first
     await manager.lock()
@@ -75,6 +86,8 @@ describe('HTTP Unlock Endpoint', () => {
   it('should accept custom delay via scheduleUnlock', async () => {
     fixture.startPolling()
 
+    const manager = managerService.getExistingManager(TEST_DEVICE, TEST_USER)!
+
     // Lock the manager first
     await manager.lock()
     expect(manager.locked).toBe(true)
@@ -98,6 +111,8 @@ describe('HTTP Unlock Endpoint', () => {
   it('should not schedule unlock when manager is already unlocked', async () => {
     fixture.startPolling()
 
+    const manager = managerService.getExistingManager(TEST_DEVICE, TEST_USER)!
+
     // Make sure manager is unlocked
     if (manager.locked) {
       await manager.unlock()
@@ -117,6 +132,8 @@ describe('HTTP Unlock Endpoint', () => {
   it('should actually unlock after delay', async () => {
     fixture.startPolling()
 
+    const manager = managerService.getExistingManager(TEST_DEVICE, TEST_USER)!
+
     // Lock the manager
     await manager.lock()
     expect(manager.locked).toBe(true)
@@ -135,6 +152,8 @@ describe('HTTP Unlock Endpoint', () => {
 
   it('should cancel scheduled unlock when locked again', async () => {
     fixture.startPolling()
+
+    const manager = managerService.getExistingManager(TEST_DEVICE, TEST_USER)!
 
     // Lock the manager
     await manager.lock()
@@ -166,8 +185,8 @@ describe('tRPC unlock vs HTTP unlock', () => {
   const testDbPath = `/tmp/test-maam-trpc-unlock-${Date.now()}.db`
   let fixture: MaaDeviceFixture
 
-  beforeEach(() => {
-    fixture = setupTestEnvironment(testDbPath)
+  beforeEach(async () => {
+    fixture = await setupTestEnvironment(testDbPath)
   })
 
   afterEach(() => {
@@ -176,6 +195,8 @@ describe('tRPC unlock vs HTTP unlock', () => {
 
   it('should unlock immediately when using manager.unlock() directly (tRPC behavior)', async () => {
     fixture.startPolling()
+
+    const manager = managerService.getExistingManager(TEST_DEVICE, TEST_USER)!
 
     // Lock the manager
     await manager.lock()
@@ -192,6 +213,8 @@ describe('tRPC unlock vs HTTP unlock', () => {
 
   it('should schedule delayed unlock when using scheduleUnlock() (HTTP endpoint behavior)', async () => {
     fixture.startPolling()
+
+    const manager = managerService.getExistingManager(TEST_DEVICE, TEST_USER)!
 
     // Lock the manager
     await manager.lock()

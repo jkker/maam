@@ -5,18 +5,22 @@
 import { serve } from '@hono/node-server'
 
 import { MaaDeviceFixture } from './device-fixture'
-import app, { manager } from '../index'
+import app from '../index'
 import { logger } from '../lib/logger'
 
 const PORT = 3113
 const FIXTURE_POLLING_INTERVAL = 2000 // 2 seconds
 
+// Test user and device credentials
+const TEST_DEVICE = 'test-device-fixture'
+const TEST_USER = 'test-user'
+
 logger.info('Starting server in TEST MODE with device fixture')
 
 // Create and start the device fixture
 const fixture = new MaaDeviceFixture({
-  device: manager.device,
-  user: manager.user,
+  device: TEST_DEVICE,
+  user: TEST_USER,
   pollingInterval: FIXTURE_POLLING_INTERVAL,
   baseUrl: `http://localhost:${PORT}`,
 })

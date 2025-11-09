@@ -6,13 +6,14 @@ import { MaaManager } from '../MaaManager'
 import { MaaDeviceFixture, createTestManager } from './fixture'
 import { app } from '../index'
 import { initDatabase, closeDatabase } from '../lib/db'
+import { dbService } from '../lib/db/service'
 
 describe('MJPEG Screenshot Stream', () => {
   const testDbPath = `/tmp/test-maam-mjpeg-${Date.now()}.db`
   let manager: MaaManager
   let fixture: MaaDeviceFixture
 
-  beforeEach(() => {
+  beforeEach(async () => {
     // Set test database path
     process.env.DATABASE_PATH = testDbPath
 
@@ -32,6 +33,10 @@ describe('MJPEG Screenshot Stream', () => {
     const testSetup = createTestManager('test-device', 'test-user')
     manager = testSetup.manager
     fixture = testSetup.fixture
+
+    // Register user and device in database
+    await dbService.getUserOrCreate('test-user')
+    await dbService.getDeviceOrCreate('test-device', 'test-user')
   })
 
   afterEach(() => {
@@ -57,7 +62,12 @@ describe('MJPEG Screenshot Stream', () => {
   })
 
   it('should return proper MJPEG headers', async () => {
-    const res = await app.request('/maa/screenshot.mjpeg')
+    const res = await app.request('/maa/screenshot.mjpeg', {
+      headers: {
+        'x-user-id': 'test-user',
+        'x-device-id': 'test-device',
+      },
+    })
 
     expect(res.status).toBe(200)
     expect(res.headers.get('Content-Type')).toBe('multipart/x-mixed-replace;boundary=--bound')
