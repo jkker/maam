@@ -2,9 +2,9 @@ import fs from 'node:fs'
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 
-import { managerService } from '../lib/managers'
 import { MaaDeviceFixture } from './fixture'
 import { initDatabase, closeDatabase } from '../lib/db'
+import { managerService } from '../lib/managers'
 
 // Test credentials
 const TEST_DEVICE = 'test-device-unlock'

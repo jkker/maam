@@ -1,6 +1,6 @@
 import { MaaManager } from '../MaaManager'
-import { logger } from './logger'
 import { dbService } from './db/service'
+import { logger } from './logger'
 
 /**
  * Multi-tenant manager system

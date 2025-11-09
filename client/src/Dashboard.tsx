@@ -48,7 +48,6 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 
 import { ScheduleManager } from './components/ScheduleManager'
 import { TaskStatusBadge } from './components/task-status-badge'
-import { UserMenu } from './components/UserMenu'
 
 import {
   Accordion,
@@ -67,6 +66,7 @@ import { Field, FieldLabel } from './components/ui/field'
 import { ScrollArea } from './components/ui/scroll-area'
 import { Skeleton } from './components/ui/skeleton'
 import { Spinner } from './components/ui/spinner'
+import { UserMenu } from './components/UserMenu'
 import { Footer, Header } from './Layout'
 import { invalidateQueries, trpc } from './lib/trpc'
 import { cn, formatDuration, formatTaskType, formatTime } from './utils'

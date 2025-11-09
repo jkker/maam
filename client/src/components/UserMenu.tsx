@@ -1,6 +1,10 @@
 import { LogOut, User } from 'lucide-react'
+import { toast } from 'sonner'
+
 import { useAuthStore } from '@/lib/auth-store'
+
 import { Button } from './ui/button'
+
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -9,7 +13,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from './ui/dropdown-menu'
-import { toast } from 'sonner'
 
 export function UserMenu() {
   const { userId, deviceId, deviceName, logout } = useAuthStore()

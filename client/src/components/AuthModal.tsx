@@ -1,6 +1,9 @@
-import { useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
+import { useState } from 'react'
 import { toast } from 'sonner'
+
+import { useAuthStore } from '@/lib/auth-store'
+import { trpc } from '@/lib/trpc'
 
 import { Button } from './ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from './ui/dialog'
@@ -8,8 +11,6 @@ import { Field, FieldLabel } from './ui/field'
 import { Input } from './ui/input'
 import { Spinner } from './ui/spinner'
 
-import { useAuthStore } from '@/lib/auth-store'
-import { trpc } from '@/lib/trpc'
 
 export function AuthModal() {
   const [userId, setUserId] = useState('')

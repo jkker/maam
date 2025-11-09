@@ -1,6 +1,6 @@
+import type { MaaManager } from './MaaManager'
 import type { TaskData } from './Task'
 import type { ScheduleData } from './TaskSchedule'
-import type { MaaManager } from './MaaManager'
 
 import { serveStatic } from '@hono/node-server/serve-static'
 import { trpcServer } from '@hono/trpc-server'

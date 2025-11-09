@@ -16,7 +16,7 @@ function getAuthHeaders() {
     const authStorage = localStorage.getItem('maam-auth-storage')
     if (!authStorage) return {}
 
-    const parsed = JSON.parse(authStorage)
+    const parsed = JSON.parse(authStorage) as { state?: { userId?: string; deviceId?: string } }
     const state = parsed?.state
 
     if (state?.userId && state?.deviceId) {
