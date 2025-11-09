@@ -30,6 +30,7 @@ export const schedules = sqliteTable('schedules', {
   timezone: text('timezone'),
   lastRunTime: text('last_run_time'),
   runCount: integer('run_count').notNull().default(0),
+  cooldownUntil: text('cooldown_until'),
   device: text('device').notNull(),
   createdAt: text('created_at')
     .notNull()

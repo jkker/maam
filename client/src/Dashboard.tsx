@@ -1,4 +1,4 @@
-import type { TaskData } from '@maam/server'
+import type { ScheduleData, TaskData } from '@maam/server'
 
 import { STAGE_OPTIONS } from '@maam/server/const'
 import { useMutation, useQuery } from '@tanstack/react-query'
@@ -9,17 +9,21 @@ import {
   Copy,
   ListTodo,
   LockIcon,
+  MoreVertical,
+  Pause,
   Play,
   Plus,
+  RotateCcw,
   Search,
   Settings2,
   SettingsIcon,
   Square,
   Terminal,
+  Trash2,
   UnlockIcon,
 } from 'lucide-react'
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { toast } from 'sonner'
 import { Temporal } from 'temporal-polyfill'
 
@@ -362,33 +366,257 @@ function ScreenshotViewer({ className }: { className?: string }) {
   )
 }
 
+type HistoryTimelineEntry = {
+  kind: 'history'
+  id: string
+  task: TaskData
+  eventTime: Temporal.ZonedDateTime
+}
+
+type ScheduledTimelineEntry = {
+  kind: 'scheduled'
+  id: string
+  schedule: ScheduleData
+  status: 'SCHEDULED' | 'POSTPONED'
+  eventTime: Temporal.ZonedDateTime
+  runTime: Temporal.ZonedDateTime
+}
+
+type TimelineEntry = HistoryTimelineEntry | ScheduledTimelineEntry
+
+type TimelineGroup = {
+  day: Temporal.ZonedDateTime
+  label: string
+  items: TimelineEntry[]
+}
+
+const TIMELINE_WINDOW_DAYS = 7
+
+function formatDayGroupLabel(day: Temporal.ZonedDateTime, now: Temporal.ZonedDateTime) {
+  const dayDate = day.toPlainDate()
+  const nowDate = now.toPlainDate()
+  const diff = dayDate.since(nowDate).days
+
+  if (diff === 0) return 'Today'
+  if (diff === 1) return 'Tomorrow'
+  if (diff === -1) return 'Yesterday'
+
+  return dayDate.toLocaleString(undefined, { weekday: 'long', month: 'short', day: 'numeric' })
+}
+
 function TaskManager({ className }: { className?: string }) {
   const { data: tasks = [], status } = useSubscription(trpc.tasks.subscriptionOptions())
+  const { data: schedules = [], isLoading: schedulesLoading } = useQuery(
+    trpc.schedule.get.queryOptions(),
+  )
   const [searchQuery, setSearchQuery] = useState('')
-  const isLoading = status === 'connecting'
+  const timezone = useMemo(() => Temporal.Now.timeZoneId(), [])
+  const scheduleQueryKey = trpc.schedule.get.queryKey()
 
-  const filteredTasks = tasks.filter(
-    (task) =>
-      searchQuery === '' ||
-      task.type.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      task.id.toLowerCase().includes(searchQuery.toLowerCase()),
+  const postponeMutation = useMutation(
+    trpc.schedule.postpone.mutationOptions({
+      onSuccess: (data) => {
+        toast.success('Next run postponed', {
+          description: data.cooldownUntil
+            ? `Skipped until ${formatTime(data.cooldownUntil)}`
+            : undefined,
+        })
+        void invalidateQueries({ queryKey: scheduleQueryKey })
+      },
+      onError: (error) =>
+        toast.error('Failed to postpone schedule', { description: error.message }),
+    }),
   )
 
-  const recentTasks = filteredTasks.slice(-20).reverse()
+  const resumeMutation = useMutation(
+    trpc.schedule.resume.mutationOptions({
+      onSuccess: () => {
+        toast.success('Schedule restored')
+        void invalidateQueries({ queryKey: scheduleQueryKey })
+      },
+      onError: (error) => toast.error('Failed to restore schedule', { description: error.message }),
+    }),
+  )
+
+  const removeScheduleMutation = useMutation(
+    trpc.schedule.remove.mutationOptions({
+      onSuccess: () => {
+        toast.success('Schedule deleted')
+        void invalidateQueries({ queryKey: scheduleQueryKey })
+      },
+      onError: (error) => toast.error('Failed to delete schedule', { description: error.message }),
+    }),
+  )
+
+  const busyScheduleIds = useMemo(() => {
+    const ids = new Set<string>()
+    if (postponeMutation.isPending && postponeMutation.variables)
+      ids.add(postponeMutation.variables.id)
+    if (resumeMutation.isPending && resumeMutation.variables) ids.add(resumeMutation.variables)
+    if (removeScheduleMutation.isPending && removeScheduleMutation.variables)
+      ids.add(removeScheduleMutation.variables)
+    return ids
+  }, [
+    postponeMutation.isPending,
+    postponeMutation.variables,
+    resumeMutation.isPending,
+    resumeMutation.variables,
+    removeScheduleMutation.isPending,
+    removeScheduleMutation.variables,
+  ])
+
+  const { groups, total } = useMemo(() => {
+    const now = Temporal.Now.zonedDateTimeISO(timezone)
+    const startRange = now.subtract({ days: TIMELINE_WINDOW_DAYS })
+    const endRange = now.add({ days: TIMELINE_WINDOW_DAYS })
+    const normalizedQuery = searchQuery.trim().toLowerCase()
+
+    const matchesQuery = (haystack: string) =>
+      normalizedQuery === '' || haystack.toLowerCase().includes(normalizedQuery)
+
+    const historyEntries: HistoryTimelineEntry[] = []
+    for (const task of tasks) {
+      const timestamp = task.completedAt || task.startedAt || task.createdAt
+      if (!timestamp) continue
+      const eventTime = Temporal.ZonedDateTime.from(timestamp).withTimeZone(timezone)
+      if (Temporal.ZonedDateTime.compare(eventTime, startRange) < 0) continue
+      if (Temporal.ZonedDateTime.compare(eventTime, endRange) > 0) continue
+
+      const haystack = [task.type, task.id, task.params ?? '', task.status ?? '', task.stage]
+        .join(' ')
+        .toLowerCase()
+      if (!matchesQuery(haystack)) continue
+
+      historyEntries.push({ kind: 'history', id: task.id, task, eventTime })
+    }
+
+    const upcomingEntries: ScheduledTimelineEntry[] = []
+    for (const schedule of schedules) {
+      const scheduleTimezone = schedule.timezone ?? timezone
+      const scheduleNow = Temporal.Now.zonedDateTimeISO(scheduleTimezone)
+      const horizon = scheduleNow.add({ days: TIMELINE_WINDOW_DAYS })
+      let candidate = scheduleNow.with({
+        hour: schedule.hour,
+        minute: schedule.minute ?? 0,
+        second: 0,
+        millisecond: 0,
+        microsecond: 0,
+        nanosecond: 0,
+      })
+      if (Temporal.ZonedDateTime.compare(candidate, scheduleNow) <= 0) {
+        candidate = candidate.add({ days: 1 })
+      }
+
+      let cooldown = schedule.cooldownUntil
+        ? Temporal.ZonedDateTime.from(schedule.cooldownUntil).withTimeZone(scheduleTimezone)
+        : undefined
+
+      const baseHaystack = [
+        schedule.type,
+        schedule.id,
+        schedule.params ?? '',
+        formatTaskType(schedule.type),
+      ]
+        .join(' ')
+        .toLowerCase()
+
+      while (Temporal.ZonedDateTime.compare(candidate, horizon) <= 0) {
+        const localTime = candidate.withTimeZone(timezone)
+        if (Temporal.ZonedDateTime.compare(localTime, endRange) > 0) break
+        if (Temporal.ZonedDateTime.compare(localTime, startRange) < 0) {
+          candidate = candidate.add({ days: 1 })
+          continue
+        }
+
+        if (cooldown && Temporal.ZonedDateTime.compare(candidate, cooldown) === 0) {
+          if (matchesQuery(baseHaystack)) {
+            upcomingEntries.push({
+              kind: 'scheduled',
+              id: `${schedule.id}|${candidate.toString()}|postponed`,
+              schedule,
+              status: 'POSTPONED',
+              eventTime: localTime,
+              runTime: candidate,
+            })
+          }
+          cooldown = undefined
+          candidate = candidate.add({ days: 1 })
+          continue
+        }
+
+        if (matchesQuery(baseHaystack)) {
+          upcomingEntries.push({
+            kind: 'scheduled',
+            id: `${schedule.id}|${candidate.toString()}`,
+            schedule,
+            status: 'SCHEDULED',
+            eventTime: localTime,
+            runTime: candidate,
+          })
+        }
+
+        candidate = candidate.add({ days: 1 })
+      }
+    }
+
+    const combined: TimelineEntry[] = [...historyEntries, ...upcomingEntries]
+    combined.sort((a, b) => Temporal.ZonedDateTime.compare(a.eventTime, b.eventTime))
+
+    const groupMap = new Map<string, TimelineGroup>()
+    for (const entry of combined) {
+      const dayStart = entry.eventTime.with({
+        hour: 0,
+        minute: 0,
+        second: 0,
+        millisecond: 0,
+        microsecond: 0,
+        nanosecond: 0,
+      })
+      const key = dayStart.toString()
+      if (!groupMap.has(key)) {
+        groupMap.set(key, {
+          day: dayStart,
+          label: formatDayGroupLabel(dayStart, now),
+          items: [],
+        })
+      }
+      groupMap.get(key)!.items.push(entry)
+    }
+
+    const groups = Array.from(groupMap.values()).sort((a, b) =>
+      Temporal.ZonedDateTime.compare(a.day, b.day),
+    )
+
+    for (const group of groups) {
+      group.items.sort((a, b) => Temporal.ZonedDateTime.compare(a.eventTime, b.eventTime))
+    }
+
+    return { groups, total: combined.length }
+  }, [tasks, schedules, timezone, searchQuery])
+
+  const isLoading = status === 'connecting' || schedulesLoading
+
+  const handlePostpone = (scheduleId: string) => postponeMutation.mutate({ id: scheduleId })
+  const handleResume = (scheduleId: string) => resumeMutation.mutate(scheduleId)
+  const handleDelete = (scheduleId: string) => removeScheduleMutation.mutate(scheduleId)
 
   return (
-    <Card className={cn(className, 'pb-1 gap-1')}>
+    <Card className={cn(className, 'flex flex-col overflow-hidden pb-0 gap-0')}>
       <CardHeader>
         <CardTitle>
           <ListTodo />
           Tasks
         </CardTitle>
+        <CardDescription className="text-xs text-muted-foreground">
+          Past {TIMELINE_WINDOW_DAYS} days &amp; next {TIMELINE_WINDOW_DAYS} days · Timezone:{' '}
+          {timezone}
+        </CardDescription>
       </CardHeader>
       <CardContent>
         <InputGroup>
           <InputGroupInput
             type="search"
-            placeholder="Search..."
+            placeholder="Search by type, ID, or params"
             value={searchQuery}
             onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearchQuery(e.target.value)}
           />
@@ -397,88 +625,223 @@ function TaskManager({ className }: { className?: string }) {
           </InputGroupAddon>
           <InputGroupAddon align="inline-end">
             <InputGroupText>
-              {tasks.length} task{tasks.length !== 1 ? 's' : ''}
+              {total} item{total === 1 ? '' : 's'}
             </InputGroupText>
           </InputGroupAddon>
         </InputGroup>
       </CardContent>
-      {isLoading && (
-        <div className="p-4 space-y-2">
-          <Skeleton className="h-6 w-full mb-2" />
-          <Skeleton className="h-6 w-full mb-2" />
-          <Skeleton className="h-6 w-full mb-2" />
-        </div>
-      )}
-      {!isLoading && (
-        <Accordion className="w-full px-4" type="multiple">
-          {recentTasks.length === 0 ? (
+      <div className="flex-1">
+        {isLoading ? (
+          <div className="p-4 space-y-2">
+            <Skeleton className="h-6 w-full" />
+            <Skeleton className="h-6 w-full" />
+            <Skeleton className="h-6 w-full" />
+          </div>
+        ) : groups.length === 0 ? (
+          <div className="flex h-full items-center justify-center p-6">
             <Empty>
-              <EmptyDescription>No tasks yet</EmptyDescription>
+              <EmptyDescription>
+                {searchQuery
+                  ? 'No tasks match your search'
+                  : 'Nothing scheduled for this window yet'}
+              </EmptyDescription>
             </Empty>
-          ) : (
-            recentTasks.map((task) => <TaskItem key={task.id} {...task} />)
-          )}
-        </Accordion>
-      )}
+          </div>
+        ) : (
+          <ScrollArea className="max-h-[24rem] md:max-h-[28rem] lg:max-h-[32rem]">
+            <div className="space-y-6 pr-4">
+              {groups.map((group) => (
+                <section key={group.day.toString()} className="space-y-3">
+                  <div className="sticky top-0 z-10 -mx-4 border-b bg-card/95 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground backdrop-blur supports-[backdrop-filter]:bg-card/75">
+                    <div className="flex items-baseline justify-between gap-2">
+                      <span>{group.label}</span>
+                      <span>
+                        {group.day.toLocaleString(undefined, { month: 'short', day: 'numeric' })}
+                      </span>
+                    </div>
+                  </div>
+                  <Accordion type="multiple" className="space-y-2">
+                    {group.items.map((entry) => (
+                      <TaskTimelineItem
+                        key={entry.id}
+                        entry={entry}
+                        timezone={timezone}
+                        onPostpone={handlePostpone}
+                        onResume={handleResume}
+                        onDelete={handleDelete}
+                        isBusy={
+                          entry.kind === 'scheduled' && busyScheduleIds.has(entry.schedule.id)
+                        }
+                      />
+                    ))}
+                  </Accordion>
+                </section>
+              ))}
+            </div>
+          </ScrollArea>
+        )}
+      </div>
     </Card>
   )
 }
 
-function TaskItem({
-  stage,
-  status,
-  id,
-  type,
-  params,
-  duration,
-  startedAt,
-  createdAt,
-  completedAt,
-  className,
-}: TaskData & { className?: string }) {
-  const displayStatus = status || stage
-  const t = completedAt || startedAt || createdAt
-  const isFailed = status === 'FAILED'
-  const isCancelled = status === 'CANCELLED'
+type TaskTimelineItemProps = {
+  entry: TimelineEntry
+  timezone: string
+  onPostpone: (scheduleId: string) => void
+  onResume: (scheduleId: string) => void
+  onDelete: (scheduleId: string) => void
+  isBusy: boolean
+}
 
-  return (
-    <AccordionItem value={id} className={className}>
-      <AccordionTrigger
+function TaskTimelineItem({
+  entry,
+  timezone,
+  onPostpone,
+  onResume,
+  onDelete,
+  isBusy,
+}: TaskTimelineItemProps) {
+  if (entry.kind === 'history') {
+    const { task, eventTime } = entry
+    const status = task.status ?? task.stage
+    const isFailed = status === 'FAILED'
+    const isCancelled = status === 'CANCELLED'
+
+    return (
+      <AccordionItem
+        value={entry.id}
         className={cn(
-          'flex items-center text-muted-foreground gap-2 text-xs',
-          isFailed && 'bg-red-50 dark:bg-red-950/20 border-l-2 border-red-500',
-          isCancelled && 'opacity-60',
+          'rounded-lg border bg-card/60 shadow-sm transition hover:border-primary/30',
+          isFailed && 'border-red-200 bg-red-50/60 dark:border-red-900 dark:bg-red-950/20',
+          isCancelled && 'opacity-70',
         )}
       >
-        <TaskStatusBadge status={displayStatus} iconOnly />
-        <h4 className="font-semibold text-primary text-sm mr-auto">{formatTaskType(type)}</h4>
-        <time>{formatTime(t)}</time>
-        {duration && (
-          <span className="font-mono whitespace-pre">
-            {formatDuration(duration)?.padStart(5, ' ')}
-          </span>
-        )}
-      </AccordionTrigger>
-      <AccordionContent className="grid grid-cols-2 gap-2 text-xs px-2">
-        {isFailed && (
-          <div className="col-span-2 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800 rounded p-2 mb-2">
-            <span className="text-red-600 dark:text-red-400 font-medium">
-              ⚠️ This task failed or timed out after 24 hours
+        <AccordionTrigger className="flex items-center gap-3 px-3 py-2 text-xs text-muted-foreground hover:no-underline">
+          <TaskStatusBadge status={status} iconOnly />
+          <div className="flex flex-1 flex-col text-left">
+            <span className="text-sm font-semibold text-primary">{formatTaskType(task.type)}</span>
+            <span className="text-xs text-muted-foreground">
+              {formatTime(eventTime)} · {task.stage}
+              {task.status ? ` (${task.status})` : ''}
             </span>
           </div>
-        )}
-        {params && (
-          <div>
-            <span className="text-gray-500 dark:text-gray-400">Params:</span>
-            <p className="text-gray-900 dark:text-white break-all">{params}</p>
+          {task.duration && (
+            <span className="font-mono text-xs text-muted-foreground">
+              {formatDuration(task.duration)}
+            </span>
+          )}
+        </AccordionTrigger>
+        <AccordionContent className="px-3 pb-3 text-xs">
+          {isFailed && (
+            <div className="mb-2 rounded-md border border-red-200 bg-red-50 p-2 text-red-700 dark:border-red-800 dark:bg-red-950/20 dark:text-red-300">
+              ⚠️ This task failed or timed out after 24 hours
+            </div>
+          )}
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div>
+              <span className="text-muted-foreground">Created</span>
+              <p className="font-medium text-primary">{formatTime(task.createdAt)}</p>
+            </div>
+            {task.startedAt && (
+              <div>
+                <span className="text-muted-foreground">Started</span>
+                <p className="font-medium text-primary">{formatTime(task.startedAt)}</p>
+              </div>
+            )}
+            {task.completedAt && (
+              <div>
+                <span className="text-muted-foreground">Completed</span>
+                <p className="font-medium text-primary">{formatTime(task.completedAt)}</p>
+              </div>
+            )}
+            {task.params && (
+              <div className="sm:col-span-2">
+                <span className="text-muted-foreground">Params</span>
+                <p className="break-all font-mono text-muted-foreground/90">{task.params}</p>
+              </div>
+            )}
+          </div>
+          <div className="mt-2 text-[0.7rem] text-muted-foreground">Task ID: {task.id}</div>
+        </AccordionContent>
+      </AccordionItem>
+    )
+  }
+
+  const { schedule, status, eventTime, runTime } = entry
+  const scheduleTimezone = schedule.timezone ?? timezone
+  const isPostponed = status === 'POSTPONED'
+
+  return (
+    <AccordionItem
+      className="rounded-lg border bg-card/60 shadow-sm transition hover:border-primary/30"
+      value={entry.id}
+    >
+      <AccordionTrigger className="flex items-center gap-3 px-3 py-2 text-xs text-muted-foreground hover:no-underline">
+        <TaskStatusBadge status={status} iconOnly />
+        <div className="flex flex-1 flex-col text-left">
+          <span className="text-sm font-semibold text-primary">
+            {formatTaskType(schedule.type)}
+          </span>
+          <span className="text-xs text-muted-foreground">
+            {isPostponed ? 'Postponed run' : 'Scheduled'} ·{' '}
+            {eventTime.toLocaleString(undefined, { timeStyle: 'short' })}
+          </span>
+        </div>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="icon" className="h-7 w-7" disabled={isBusy}>
+              {isBusy ? <Spinner className="size-4" /> : <MoreVertical className="size-4" />}
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-44">
+            {isPostponed ? (
+              <DropdownMenuItem onSelect={() => onResume(schedule.id)} disabled={isBusy}>
+                <RotateCcw className="size-4" />
+                Restore next run
+              </DropdownMenuItem>
+            ) : (
+              <DropdownMenuItem onSelect={() => onPostpone(schedule.id)} disabled={isBusy}>
+                <Pause className="size-4" />
+                Skip next run
+              </DropdownMenuItem>
+            )}
+            <DropdownMenuItem
+              variant="destructive"
+              onSelect={() => onDelete(schedule.id)}
+              disabled={isBusy}
+            >
+              <Trash2 className="size-4" />
+              Delete schedule
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </AccordionTrigger>
+      <AccordionContent className="px-3 pb-3 text-xs space-y-3">
+        {isPostponed && (
+          <div className="rounded-md border border-amber-200 bg-amber-50 p-2 text-amber-800 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-200">
+            This occurrence has been postponed. Restore it to re-enable the next run.
           </div>
         )}
-        {completedAt && (
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div>
-            <span className="text-gray-500 dark:text-gray-400">Completed:</span>
-            <p className="text-gray-900 dark:text-white">{formatTime(completedAt)}</p>
+            <span className="text-muted-foreground">Local run time</span>
+            <p className="font-medium text-primary">{formatTime(eventTime)}</p>
           </div>
-        )}
+          <div>
+            <span className="text-muted-foreground">Schedule timezone ({scheduleTimezone})</span>
+            <p className="font-medium text-primary">
+              {runTime.toLocaleString(undefined, { timeStyle: 'short', timeZoneName: 'short' })}
+            </p>
+          </div>
+          {schedule.params && (
+            <div className="sm:col-span-2">
+              <span className="text-muted-foreground">Params</span>
+              <p className="break-all font-mono text-muted-foreground/90">{schedule.params}</p>
+            </div>
+          )}
+        </div>
+        <div className="text-[0.7rem] text-muted-foreground">Schedule ID: {schedule.id}</div>
       </AccordionContent>
     </AccordionItem>
   )

@@ -3,6 +3,7 @@ import type { Schedule, TaskType } from './lib/schema'
 import { EventEmitter } from 'node:events'
 
 import sharp from 'sharp'
+import { Temporal } from 'temporal-polyfill'
 import { ToadScheduler } from 'toad-scheduler'
 
 import { MJPEG_BOUNDARY, T } from './const'
@@ -88,9 +89,13 @@ export class MaaManager extends EventEmitter<MaaManagerEventMap> {
         const job = new TaskSchedule(
           schedule.type as TaskType,
           schedule.hour,
-          schedule.minute,
+          schedule.minute ?? 0,
           schedule.timezone || this.tz,
           () => this.create(schedule.type as TaskType, schedule.params || undefined),
+          {
+            params: schedule.params ?? undefined,
+            onStateChange: (updated) => this.persistScheduleState(updated),
+          },
         )
 
         // Restore execution metadata
@@ -99,6 +104,9 @@ export class MaaManager extends EventEmitter<MaaManagerEventMap> {
         }
         if (schedule.runCount) {
           job.runCount = schedule.runCount
+        }
+        if (schedule.cooldownUntil) {
+          job.cooldownUntil = Temporal.ZonedDateTime.from(schedule.cooldownUntil)
         }
 
         this.scheduler.addCronJob(job)
@@ -164,7 +172,10 @@ export class MaaManager extends EventEmitter<MaaManagerEventMap> {
    * @returns Deterministic identifier for the cron job, used to manage its lifecycle.
    */
   addSchedule({ task, hour, minute = 0, params, timezone = this.tz }: Schedule) {
-    const job = new TaskSchedule(task, hour, minute, timezone, () => this.create(task, params))
+    const job = new TaskSchedule(task, hour, minute, timezone, () => this.create(task, params), {
+      params,
+      onStateChange: (updated) => this.persistScheduleState(updated),
+    })
     this.scheduler.addCronJob(job)
 
     // Persist schedule to database (async, non-blocking)
@@ -191,8 +202,61 @@ export class MaaManager extends EventEmitter<MaaManagerEventMap> {
     return scheduleData
   }
 
-  get schedules() {
-    return this.scheduler.getAllJobs().filter((job) => job instanceof TaskSchedule)
+  private persistScheduleState(schedule: TaskSchedule) {
+    dbService.updateSchedule(schedule.data).catch((error) => {
+      logger.error(`Failed to update schedule ${schedule.id} in database:`, error)
+    })
+  }
+
+  private getTaskSchedule(id: string) {
+    return this.schedules.find((job) => job.id === id)
+  }
+
+  postponeSchedule(id: string, until?: string) {
+    const schedule = this.getTaskSchedule(id)
+    if (!schedule) throw new Error(`Schedule ${id} not found`)
+
+    const timezone = schedule.timezone || this.tz
+    const now = Temporal.Now.zonedDateTimeISO(timezone)
+    let cooldownUntil = until
+      ? Temporal.ZonedDateTime.from(until).withTimeZone(timezone)
+      : now.with({
+          hour: schedule.hour,
+          minute: schedule.minute,
+          second: 0,
+          millisecond: 0,
+          microsecond: 0,
+          nanosecond: 0,
+        })
+
+    if (Temporal.ZonedDateTime.compare(cooldownUntil, now) <= 0) {
+      cooldownUntil = cooldownUntil.add({ days: 1 })
+    }
+
+    schedule.cooldownUntil = cooldownUntil
+    this.persistScheduleState(schedule)
+    logger.info(`Postponed schedule ${id} until ${cooldownUntil.toString()}`)
+
+    return schedule.data
+  }
+
+  resumeSchedule(id: string) {
+    const schedule = this.getTaskSchedule(id)
+    if (!schedule) throw new Error(`Schedule ${id} not found`)
+
+    if (schedule.cooldownUntil) {
+      delete schedule.cooldownUntil
+      this.persistScheduleState(schedule)
+      logger.info(`Restored schedule ${id} to normal cadence`)
+    }
+
+    return schedule.data
+  }
+
+  get schedules(): TaskSchedule[] {
+    return this.scheduler
+      .getAllJobs()
+      .filter((job): job is TaskSchedule => job instanceof TaskSchedule)
   }
 
   async stop() {

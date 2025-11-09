@@ -5,11 +5,17 @@ import { CronJob, Task as ScheduledTask } from 'toad-scheduler'
 import { logger } from './lib/logger'
 import { getNow } from './lib/temporal'
 
+type TaskScheduleOptions = {
+  params?: string
+  onStateChange?: (schedule: TaskSchedule) => void
+}
+
 export class TaskSchedule extends CronJob {
   readonly id: string
   public lastRunTime?: Temporal.ZonedDateTime
   public runCount: number = 0
   public cooldownUntil?: Temporal.ZonedDateTime
+  public params?: string
 
   constructor(
     public type: TaskType,
@@ -17,6 +23,7 @@ export class TaskSchedule extends CronJob {
     public minute: number,
     public timezone: string,
     handler: () => void,
+    { params, onStateChange }: TaskScheduleOptions = {},
   ) {
     const id = `${type}|${hour}:${minute}`
 
@@ -29,11 +36,13 @@ export class TaskSchedule extends CronJob {
             `Skipping scheduled task ${this.id} due to active cooldown until ${this.cooldownUntil.toString()}`,
           )
           delete this.cooldownUntil
+          onStateChange?.(this)
           return
         }
-        this.lastRunTime = getNow()
+        this.lastRunTime = getNow(this.timezone)
         this.runCount += 1
         logger.info(`Executing scheduled task ${this.id} (run #${this.runCount})`)
+        onStateChange?.(this)
         try {
           handler()
         } catch (error) {
@@ -43,6 +52,7 @@ export class TaskSchedule extends CronJob {
       { preventOverrun: true, id },
     )
     this.id = id
+    this.params = params
   }
 
   get data() {
@@ -52,8 +62,10 @@ export class TaskSchedule extends CronJob {
       hour: this.hour,
       minute: this.minute,
       timezone: this.timezone,
+      ...(this.params && { params: this.params }),
       ...(this.lastRunTime && { lastRunTime: this.lastRunTime.toString() }),
       ...(this.runCount && { runCount: this.runCount }),
+      ...(this.cooldownUntil && { cooldownUntil: this.cooldownUntil.toString() }),
     }
   }
 }
