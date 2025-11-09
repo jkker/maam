@@ -1,6 +1,4 @@
-import fs from 'node:fs'
-import path from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { resolve } from 'node:path'
 
 import Database from 'better-sqlite3'
 import { drizzle } from 'drizzle-orm/better-sqlite3'
@@ -8,37 +6,13 @@ import { drizzle } from 'drizzle-orm/better-sqlite3'
 import * as schema from './schema'
 import { logger } from '../logger'
 
-const __filename = fileURLToPath(import.meta.url)
-const __dirname = path.dirname(__filename)
-
-let currentDbPath: string | null = null
 let sqlite: Database.Database | null = null
 let dbInstance: ReturnType<typeof drizzle> | null = null
 
-function getDbPath() {
-  return process.env.DATABASE_PATH || path.join(__dirname, '../../../data/maam.db')
-}
-
-function ensureDbDir(dbPath: string) {
-  const dbDir = path.dirname(dbPath)
-  if (!fs.existsSync(dbDir)) {
-    fs.mkdirSync(dbDir, { recursive: true })
-  }
-}
-
 function getDatabase() {
-  const dbPath = getDbPath()
-
-  // Reinitialize if path changed
-  if (currentDbPath !== dbPath && sqlite) {
-    sqlite.close()
-    sqlite = null
-    dbInstance = null
-  }
+  const dbPath = resolve('maam.db')
 
   if (!sqlite) {
-    currentDbPath = dbPath
-    ensureDbDir(dbPath)
     logger.info(`Database path: ${dbPath}`)
 
     sqlite = new Database(dbPath)
@@ -64,7 +38,6 @@ export function closeDatabase() {
     sqlite.close()
     sqlite = null
     dbInstance = null
-    currentDbPath = null
   }
 }
 
