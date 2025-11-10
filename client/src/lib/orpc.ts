@@ -12,13 +12,46 @@ const url = '/rpc'
 export const queryClient = new QueryClient()
 
 /**
- * Create oRPC link with auth query params from zustand store
+ * Client context type for auth information
  */
-const link = new RPCLink({
+interface ClientContext {
+  user?: string
+  device?: string
+}
+
+/**
+ * Create oRPC link with auth injection via interceptor
+ * Auth info is automatically read from zustand store and added to query params
+ */
+const link = new RPCLink<ClientContext>({
   url,
-  fetch: async (input: RequestInfo | URL, init?: RequestInit) => {
-    // Get auth from zustand store
-    const { user, device } = useAuthStore.getState()
+  /**
+   * Interceptor to automatically inject auth from zustand store into context
+   * This runs before every request
+   */
+  interceptors: [
+    ({ next, context, path, input }) => {
+      // Get current auth from store (using IIFE to bind properly)
+      const authState = (() => useAuthStore.getState.bind(useAuthStore)())()
+
+      // Inject auth into context for this request
+      return next({
+        context: {
+          ...context,
+          user: context.user || authState.user,
+          device: context.device || authState.device,
+        },
+        path,
+        input,
+      })
+    },
+  ],
+  /**
+   * Custom fetch to add auth as URL query params
+   */
+  fetch: async (input, init, { context }) => {
+    const user = context.user
+    const device = context.device
 
     if (!user || !device) {
       return fetch(input, init)
@@ -28,20 +61,23 @@ const link = new RPCLink({
     const params = new URLSearchParams({ user, device })
     const paramString = params.toString()
 
-    let finalUrl: string
+    let finalUrl: string | URL | Request
     if (typeof input === 'string') {
-      finalUrl = paramString ? `${input}${input.includes('?') ? '&' : '?'}${paramString}` : input
+      const inputStr: string = input
+      finalUrl = paramString
+        ? `${inputStr}${inputStr.includes('?') ? '&' : '?'}${paramString}`
+        : inputStr
     } else if (input instanceof URL) {
       const url = new URL(input)
       url.searchParams.set('user', user)
       url.searchParams.set('device', device)
-      finalUrl = url.toString()
+      finalUrl = url
     } else {
       // Request object
       const url = new URL(input.url)
       url.searchParams.set('user', user)
       url.searchParams.set('device', device)
-      finalUrl = url.toString()
+      finalUrl = url
     }
 
     return fetch(finalUrl, init)
@@ -51,7 +87,7 @@ const link = new RPCLink({
 /**
  * Create oRPC client with proper type inference from router
  */
-export const orpcClient: RouterClient<typeof router> = createORPCClient(link)
+export const orpcClient: RouterClient<typeof router, ClientContext> = createORPCClient(link)
 
 /**
  * Create Tanstack Query utilities with proper type inference

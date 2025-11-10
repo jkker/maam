@@ -110,5 +110,11 @@ const config = defineConfig(
       'react-refresh/only-export-components': 'off',
     },
   },
+  {
+    files: ['./client/src/lib/orpc.ts'],
+    rules: {
+      '@typescript-eslint/unbound-method': 'off',
+    },
+  },
 )
 export default config
