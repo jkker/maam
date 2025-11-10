@@ -1,0 +1,13 @@
+{
+  "version": "7",
+  "dialect": "sqlite",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "6",
+      "when": 1762737652832,
+      "tag": "0000_right_scarlet_spider",
+      "breakpoints": true
+    }
+  ]
+}

@@ -6,7 +6,7 @@
     "dev": "vite",
     "build": "vite build",
     "start": "node ./dist/server.js",
-    "test:e2e": "vitest run",
+    "test": "vitest run",
     "typecheck": "tsc -b --noEmit",
     "db:generate": "drizzle-kit generate",
     "db:push": "drizzle-kit push",
