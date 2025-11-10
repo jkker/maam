@@ -390,15 +390,69 @@ pnpm typecheck   # Type-check package only
 
 ### Testing
 
-Tests use **Vitest** with comprehensive coverage:
+Tests use **Vitest** with comprehensive coverage following oRPC, Hono, and Drizzle best practices:
 
-- `server/src/index.test.ts` - tRPC procedure and HTTP endpoint integration tests
-- `server/src/MaaManager.test.ts` - Task and MaaManager class unit tests
+#### Test Files
+
+- `server/src/test/task.test.ts` - Task class unit tests (33 tests)
+- `server/src/test/router-public.test.ts` - Public oRPC procedures tests (7 tests)
+- `server/src/test/manager.test.ts` - MaaManager with device fixture tests (13 tests)
+- `server/src/test/assignment.test.ts` - Task-log assignment algorithm tests (15 tests)
+- `server/src/test/unlock-endpoint.test.ts` - HTTP unlock endpoint tests (7 tests)
+
+#### Running Tests
 
 ```bash
-pnpm test              # Run all tests once
+pnpm test              # Run all tests once (75 tests)
 pnpm test:watch        # Watch mode with interactive UI
+pnpm typecheck         # Type-check all packages
+pnpm lint              # Run ESLint
+pnpm ci                # Run full CI pipeline (build + lint + typecheck + test)
 ```
+
+#### Testing Patterns
+
+The codebase follows these testing best practices:
+
+1. **oRPC Server-Side Testing**: Use `call()` from `@orpc/server` for testing procedures directly
+
+   ```ts
+   import { call } from '@orpc/server'
+   const result = await call(router.auth.login, { user, device })
+   ```
+
+2. **Database Mocking**: Mock Drizzle ORM operations to avoid file I/O
+
+   ```ts
+   vi.mock('../lib/db/service', () => ({
+     saveTask: vi.fn().mockResolvedValue(undefined),
+     updateTask: vi.fn().mockResolvedValue(undefined),
+   }))
+   ```
+
+3. **Device Fixtures**: Use `MaaDeviceFixture` class to simulate MAA client behavior
+
+   ```ts
+   import { createTestManager } from '../test/fixture'
+   const { manager, fixture } = createTestManager()
+   fixture.startPolling()
+   ```
+
+4. **Temporal API**: Use proper `Temporal.ZonedDateTime` for time-based testing
+
+   ```ts
+   const createdAt = Temporal.ZonedDateTime.from('2025-11-10T12:00:00[UTC]')
+   const task = new Task('HeartBeat', createdAt)
+   ```
+
+5. **Proper Cleanup**: Always clean up resources in `afterEach` hooks
+   ```ts
+   afterEach(() => {
+     fixture.cleanup()
+     manager.scheduler.stop()
+     vi.clearAllMocks()
+   })
+   ```
 
 ### Code Quality
 
