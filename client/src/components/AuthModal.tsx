@@ -21,7 +21,7 @@ export function AuthModal() {
   const loginMutation = useMutation(
     orpc.auth.login.mutationOptions({
       onSuccess: (data) => {
-        login(data.userId, data.deviceId)
+        login(data.user, data.device)
         toast.success('Authentication successful')
       },
       onError: (error) => {

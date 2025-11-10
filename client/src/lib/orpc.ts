@@ -49,7 +49,7 @@ const link = new RPCLink({
 })
 
 /**
- * Create oRPC client with proper RouterClient typing
+ * Create oRPC client with proper type inference from router
  */
 export const orpcClient: RouterClient<typeof router> = createORPCClient(link)
 
