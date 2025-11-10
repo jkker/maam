@@ -7,7 +7,7 @@ import { Temporal } from 'temporal-polyfill'
 import { ToadScheduler } from 'toad-scheduler'
 
 import { MJPEG_BOUNDARY, T } from './const'
-import { dbService } from './lib/db/service'
+import * as dbService from './lib/db/service'
 import { logger } from './lib/logger'
 import { formatDuration, formatTime, getNow } from './lib/temporal'
 import { Task, type TaskData } from './Task'
@@ -519,7 +519,7 @@ export class MaaManager extends EventEmitter<MaaManagerEventMap> {
 
     // Persist task completion to database (async, non-blocking)
     if (!task.immediate) {
-      dbService.updateTask(task.data, this.device).catch((error) => {
+      dbService.updateTask(task.data).catch((error) => {
         logger.error(`Failed to update task ${task.id} in database:`, error)
       })
       this.emit('update', this.state)
@@ -537,7 +537,7 @@ export class MaaManager extends EventEmitter<MaaManagerEventMap> {
 
       // Persist task state update to database (async, non-blocking)
       if (!task.immediate) {
-        dbService.updateTask(task.data, this.device).catch((error) => {
+        dbService.updateTask(task.data).catch((error) => {
           logger.error(`Failed to update task ${task.id} in database:`, error)
         })
       }

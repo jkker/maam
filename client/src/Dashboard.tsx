@@ -66,7 +66,9 @@ import { Field, FieldLabel } from './components/ui/field'
 import { ScrollArea } from './components/ui/scroll-area'
 import { Skeleton } from './components/ui/skeleton'
 import { Spinner } from './components/ui/spinner'
+import { UserMenu } from './components/UserMenu'
 import { Footer, Header } from './Layout'
+import { useAuthStore } from './lib/auth-store'
 import { invalidateQueries, trpc } from './lib/trpc'
 import { cn, formatDuration, formatTaskType, formatTime } from './utils'
 
@@ -82,11 +84,14 @@ export default function Dashboard() {
   return (
     <>
       <Header>
-        <ConnectivityStatusIndicator
-          isError={isError}
-          isPending={isPending}
-          isFetching={isFetching}
-        />
+        <div className="flex items-center gap-2">
+          <ConnectivityStatusIndicator
+            isError={isError}
+            isPending={isPending}
+            isFetching={isFetching}
+          />
+          <UserMenu />
+        </div>
       </Header>
       <main className="flex-1 container mx-auto p-4 max-w-7xl grid grid-cols-1 md:grid-cols-6 lg:grid-cols-12 gap-4 auto-rows-min">
         {locked && (
@@ -333,6 +338,8 @@ function ScreenshotViewer({ className }: { className?: string }) {
   const [imageError, setImageError] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
 
+  const { user, device } = useAuthStore()
+
   return (
     <Card className={cn('aspect-video overflow-hidden flex flex-col py-0 relative', className)}>
       {/* Screenshot display area */}
@@ -351,7 +358,7 @@ function ScreenshotViewer({ className }: { className?: string }) {
           </Empty>
         ) : (
           <img
-            src="/maa/screenshot.mjpeg"
+            src={`/maa/screenshot?user=${encodeURIComponent(user!)}&device=${encodeURIComponent(device!)}`}
             alt="Live screenshot"
             className="w-full h-full object-contain"
             onLoad={() => setIsLoading(false)}

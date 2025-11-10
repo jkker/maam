@@ -7,7 +7,11 @@
     "build": "vite build",
     "start": "node ./dist/server.js",
     "test:e2e": "vitest run",
-    "typecheck": "tsc -b --noEmit"
+    "typecheck": "tsc -b --noEmit",
+    "db:generate": "drizzle-kit generate",
+    "db:push": "drizzle-kit push",
+    "db:migrate": "drizzle-kit migrate",
+    "db:studio": "drizzle-kit studio"
   },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -47,6 +51,7 @@
     "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^22.18.13",
     "@types/react": "^19.2.2",
+    "drizzle-kit": "^0.31.6",
     "typescript": "~5.9.3",
     "vite": "npm:rolldown-vite@7.1.20",
     "vite-plugin-dts": "^4.5.4"
