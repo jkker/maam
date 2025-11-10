@@ -11,7 +11,7 @@ import { compress } from 'hono/compress'
 import { logger as loggerMiddleware } from 'hono/logger'
 import { z } from 'zod'
 
-import { TASK_TYPE, MJPEG_BOUNDARY } from './const'
+import { TASK_TYPE } from './const'
 import * as dbService from './lib/db/service'
 import { DEBUG, logger } from './lib/logger'
 import { managerService } from './lib/managers'
@@ -253,19 +253,18 @@ export const app = new Hono<{ Variables: VariablesContext }>()
 
   // Screenshot endpoints - require auth query params
   .get('/maa/screenshot.jpg', async (c) => {
-    const deviceId = c.req.query('device')
-    const userId = c.req.query('user')
+    const { device, user } = c.req.query()
 
-    if (!deviceId || !userId) {
+    if (!device || !user) {
       return c.text('Unauthorized', 401)
     }
 
-    const isValid = await dbService.validateDeviceOwnership(deviceId, userId)
+    const isValid = await dbService.validateDeviceOwnership(device, user)
     if (!isValid) {
       return c.text('Unauthorized', 401)
     }
 
-    const manager = await managerService.getManager(deviceId, userId)
+    const manager = await managerService.getManager(device, user)
     const image = await manager.getScreenshotJPEG()
     return c.body(image, 200, {
       'Content-Type': 'image/jpeg',
@@ -274,41 +273,30 @@ export const app = new Hono<{ Variables: VariablesContext }>()
   })
 
   .get('/maa/screenshot.mjpeg', async (c) => {
-    const deviceId = c.req.query('device')
-    const userId = c.req.query('user')
+    const { device, user } = c.req.query()
 
-    if (!deviceId || !userId) {
-      return c.text('Unauthorized', 401)
-    }
+    const isValid = await dbService.validateDeviceOwnership(device, user)
 
-    const isValid = await dbService.validateDeviceOwnership(deviceId, userId)
-    if (!isValid) {
-      return c.text('Unauthorized', 401)
-    }
+    if (!isValid) return c.text('Unauthorized', 401)
 
-    const manager = await managerService.getManager(deviceId, userId)
-    return c.body(manager.createStream(), 200, {
-      'Content-Type': `multipart/x-mixed-replace;boundary=${MJPEG_BOUNDARY}`,
-      'Cache-Control': 'no-cache',
-      Connection: 'keep-alive',
-    })
+    const manager = await managerService.getManager(device, user)
+    return manager.streamResponse()
   })
 
   // Management endpoints - require auth query params
   .get('/maa/lock', async (c) => {
-    const deviceId = c.req.query('device')
-    const userId = c.req.query('user')
+    const { device, user } = c.req.query()
 
-    if (!deviceId || !userId) {
+    if (!device || !user) {
       return c.text('Unauthorized', 401)
     }
 
-    const isValid = await dbService.validateDeviceOwnership(deviceId, userId)
+    const isValid = await dbService.validateDeviceOwnership(device, user)
     if (!isValid) {
       return c.text('Unauthorized', 401)
     }
 
-    const manager = await managerService.getManager(deviceId, userId)
+    const manager = await managerService.getManager(device, user)
     return c.text((await manager.lock()).message)
   })
 
@@ -316,19 +304,18 @@ export const app = new Hono<{ Variables: VariablesContext }>()
     '/maa/unlock',
     zValidator('query', z.object({ delay: z.number().optional().default(10) })),
     async (c) => {
-      const deviceId = c.req.query('device')
-      const userId = c.req.query('user')
+      const { device, user } = c.req.query()
 
-      if (!deviceId || !userId) {
+      if (!device || !user) {
         return c.text('Unauthorized', 401)
       }
 
-      const isValid = await dbService.validateDeviceOwnership(deviceId, userId)
+      const isValid = await dbService.validateDeviceOwnership(device, user)
       if (!isValid) {
         return c.text('Unauthorized', 401)
       }
 
-      const manager = await managerService.getManager(deviceId, userId)
+      const manager = await managerService.getManager(device, user)
       return c.text(manager.scheduleUnlock({ minutes: c.req.valid('query').delay }))
     },
   )

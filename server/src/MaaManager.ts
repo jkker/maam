@@ -626,23 +626,32 @@ export class MaaManager extends EventEmitter<MaaManagerEventMap> {
     this.screenshotPollingInterval = undefined
   }
 
-  public createStream() {
+  public streamResponse(): Response {
     let controller: ReadableStreamDefaultController<Uint8Array>
-    return new ReadableStream<Uint8Array>({
-      start: (c) => {
-        controller = c
-        this.streams.add(controller)
-        logger.info(`Added stream controller. Active streams: ${this.streams.size}`)
-        // Start screenshot polling if this is the first stream
-        if (this.streams.size === 1) this.startScreenshotPolling()
+    return new Response(
+      new ReadableStream<Uint8Array>({
+        start: (c) => {
+          controller = c
+          this.streams.add(controller)
+          logger.info(`Added stream controller. Active streams: ${this.streams.size}`)
+          // Start screenshot polling if this is the first stream
+          if (this.streams.size === 1) this.startScreenshotPolling()
+        },
+        cancel: () => {
+          logger.info(`Closing mjpeg stream controller. Active streams: ${this.streams.size}`)
+          if (!controller) return
+          this.streams.delete(controller)
+          if (this.streams.size === 0) this.stopScreenshotPolling()
+        },
+      }),
+      {
+        headers: {
+          'Content-Type': `multipart/x-mixed-replace;boundary=${MJPEG_BOUNDARY}`,
+          'Cache-Control': 'no-cache',
+          Connection: 'keep-alive',
+        },
       },
-      cancel: () => {
-        logger.info(`Closing mjpeg stream controller. Active streams: ${this.streams.size}`)
-        if (!controller) return
-        this.streams.delete(controller)
-        if (this.streams.size === 0) this.stopScreenshotPolling()
-      },
-    })
+    )
   }
 
   public async *listen<K extends keyof MaaManagerEventMap>(
