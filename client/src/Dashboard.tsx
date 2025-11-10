@@ -248,7 +248,7 @@ function QuickActions({ locked, connected }: { locked: boolean; connected: boole
     <div className="flex gap-2">
       <ButtonGroup className="flex-1">
         <Button
-          onClick={() => start.mutate()}
+          onClick={() => start.mutate(undefined)}
           disabled={locked || !connected || start.isPending}
           className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-3 font-medium transition-all duration-200 bg-blue-600 hover:bg-blue-700 text-white shadow-lg shadow-blue-500/30 hover:shadow-xl hover:shadow-blue-500/40 hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
         >
@@ -256,7 +256,7 @@ function QuickActions({ locked, connected }: { locked: boolean; connected: boole
           {start.isPending ? 'Starting...' : 'Start'}
         </Button>
         <Button
-          onClick={() => stop.mutate()}
+          onClick={() => stop.mutate(undefined)}
           disabled={!connected || stop.isPending}
           className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-3 font-medium transition-all duration-200 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
         >
@@ -411,11 +411,13 @@ function formatDayGroupLabel(day: Temporal.ZonedDateTime, now: Temporal.ZonedDat
 }
 
 function TaskManager({ className }: { className?: string }) {
-  // Use polling for real-time updates until SSE is properly configured
-  const { data: tasks = [], status } = useQuery({
-    ...orpc.tasks.queryOptions({ input: undefined }),
-    refetchInterval: 2000, // Poll every 2 seconds
-  })
+  // Use live query options for real-time updates via event iterator
+  const { data: tasks = [] } = useQuery(
+    orpc.tasks.experimental_liveOptions({
+      input: undefined,
+      retry: true, // Infinite retry for reliable streaming
+    }),
+  )
   const { data: schedules = [], isLoading: schedulesLoading } = useQuery(
     orpc.schedule.get.queryOptions(),
   )
@@ -869,9 +871,9 @@ function LockToggle({
   const { variables, mutate, isPending } = useMutation(
     orpc.toggleLock.mutationOptions({
       onSettled: () => invalidateQueries({ queryKey: orpc.locked.queryKey() }),
-      onSuccess: ({ message, success }) => (success ? toast.success : toast.error)(message),
+      onSuccess: (data) => (data.success ? toast.success : toast.error)(data.message),
       onError: (error) =>
-        toast.error(error.data ? 'Lock Failed' : 'Unlock Failed', { description: error.message }),
+        toast.error(locked ? 'Unlock Failed' : 'Lock Failed', { description: error.message }),
     }),
   )
 
@@ -902,11 +904,13 @@ function LockToggle({
 }
 
 export function LogViewer({ className }: { className?: string }) {
-  // Use polling for real-time log updates
-  const { data: logs = [] } = useQuery({
-    ...orpc.deviceLog.queryOptions({ input: undefined }),
-    refetchInterval: 2000, // Poll every 2 seconds
-  })
+  // Use live query options for real-time log updates via event iterator
+  const { data: logs = [] } = useQuery(
+    orpc.deviceLog.experimental_liveOptions({
+      input: undefined,
+      retry: true, // Infinite retry for reliable streaming
+    }),
+  )
 
   return (
     <Card className={cn(className)}>

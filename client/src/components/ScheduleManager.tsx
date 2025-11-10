@@ -46,7 +46,8 @@ export const ScheduleManager = ({
 
   const { data: schedules = [] } = useQuery(orpc.schedule.get.queryOptions())
   const { data: officialEvents = [] } = useQuery(
-    orpc.eventCalendar.queryOptions(undefined, {
+    orpc.eventCalendar.queryOptions({
+      input: undefined,
       refetchInterval: 1000 * 60 * 60, // 60 minutes
     }),
   )

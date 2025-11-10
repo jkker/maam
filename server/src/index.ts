@@ -4,7 +4,7 @@ import type { ScheduleData } from './TaskSchedule'
 
 import { serveStatic } from '@hono/node-server/serve-static'
 import { zValidator } from '@hono/zod-validator'
-import { ORPCError, os } from '@orpc/server'
+import { ORPCError, os, createRouterClient } from '@orpc/server'
 import { RPCHandler } from '@orpc/server/fetch'
 import { Hono } from 'hono'
 import { compress } from 'hono/compress'
@@ -69,7 +69,87 @@ const authMiddleware = base.middleware(async ({ context, next }) => {
   })
 })
 
+/**
+ * MAA authentication middleware - extracts auth from body for POST or query for GET
+ */
+const maaAuthMiddleware = base.middleware(async ({ context, next }) => {
+  // For MAA endpoints, auth comes from either body (POST) or query params (GET)
+  const userId = context.userId
+  const deviceId = context.deviceId
+
+  if (!userId || !deviceId) {
+    throw new ORPCError('UNAUTHORIZED', {
+      message: 'Missing authentication credentials',
+    })
+  }
+
+  // Validate device ownership
+  const isValid = await dbService.validateDeviceOwnership(deviceId, userId)
+  if (!isValid) {
+    throw new ORPCError('UNAUTHORIZED', {
+      message: 'Unauthorized device',
+    })
+  }
+
+  // Get manager for this user+device
+  const manager = await managerService.getManager(deviceId, userId)
+
+  return next({
+    context: {
+      manager,
+      userId,
+      deviceId,
+    },
+  })
+})
+
+const maaProtectedProcedure = base.use(maaAuthMiddleware)
+
 const protectedProcedure = base.use(authMiddleware)
+
+/**
+ * MAA Remote Control Protocol router
+ */
+const maaRouter = {
+  getTask: maaProtectedProcedure.input(deviceSchema).handler(({ context: { manager } }) => {
+    const tasks = manager.getTask()
+    logger.debug('Providing tasks to MAA client:', tasks)
+    return { tasks }
+  }),
+
+  reportStatus: maaProtectedProcedure
+    .input(reportSchema)
+    .handler(({ context: { manager }, input }) => {
+      logger.debug('Reporting task status:', input.task, input.status, input.payload?.slice(0, 30))
+      const task = manager.reportStatus(input)
+      if (task) return 'success'
+      throw new ORPCError('NOT_FOUND', { message: 'task not found' })
+    }),
+
+  deviceLog: maaProtectedProcedure.input(z.string()).handler(({ context: { manager }, input }) => {
+    logger.debug('Received MAA Log:', input.slice(0, 100))
+    manager.deviceLog(input)
+    return { success: true }
+  }),
+
+  screenshotJpg: maaProtectedProcedure.handler(({ context: { manager } }) =>
+    manager.getScreenshotJPEG(),
+  ),
+
+  screenshotMjpeg: maaProtectedProcedure.handler(({ context: { manager } }) =>
+    // This returns a streaming response, handle specially
+    manager.streamResponse(),
+  ),
+
+  lock: maaProtectedProcedure.handler(async ({ context: { manager } }) => {
+    const result = await manager.lock()
+    return result.message
+  }),
+
+  unlock: maaProtectedProcedure
+    .input(z.object({ delay: z.number().optional().default(10) }))
+    .handler(({ context: { manager }, input }) => manager.scheduleUnlock({ minutes: input.delay })),
+}
 
 /**
  * Main application router combining all procedures
@@ -172,6 +252,9 @@ export const router = {
   }),
 
   eventCalendar: base.handler(async () => fetchUpcomingEvents()),
+
+  // MAA Remote Control Protocol router
+  maa: maaRouter,
 }
 
 /**
@@ -179,14 +262,17 @@ export const router = {
  */
 export type ORPCRouter = typeof router
 
+// Create server-side client for MAA procedures (for internal use)
+const maaClient = createRouterClient(router.maa)
+
 export const app = new Hono<{ Variables: VariablesContext }>().use(compress())
 
-// Setup oRPC handler
+// Setup oRPC handler for main API
 const rpcHandler = new RPCHandler(router, {
   interceptors: [],
 })
 
-// Mount oRPC handler
+// Mount oRPC handler for main API
 app.use('/rpc/*', async (c, next) => {
   // Extract auth from query params
   const userId = c.req.query('user') || undefined
@@ -204,138 +290,150 @@ app.use('/rpc/*', async (c, next) => {
   await next()
 })
 
-// MAA remote control protocol endpoints
-// These require device+user authentication
+// MAA remote control protocol endpoints using oRPC procedures internally
+// POST endpoints receive auth via JSON body
 app.post('/maa/getTask', zValidator('json', deviceSchema), async (c) => {
-    try {
-      const { device, user } = c.req.valid('json')
-
-      // Validate and get manager
-      const isValid = await dbService.validateDeviceOwnership(device, user)
-      if (!isValid) {
-        return c.json({ error: 'Unauthorized' }, 401)
-      }
-
-      const manager = await managerService.getManager(device, user)
-      const tasks = manager.getTask()
-      logger.debug('Providing tasks to MAA client:', tasks)
-      return c.json({ tasks })
-    } catch (error) {
-      logger.error('Failed to get tasks:', error)
-      return c.json({ tasks: [] }, 500)
+  try {
+    const { device, user } = c.req.valid('json')
+    // Call oRPC procedure using server-side client
+    const result = await maaClient.getTask(
+      { device, user },
+      { context: { userId: user, deviceId: device } },
+    )
+    return c.json(result)
+  } catch (error) {
+    if (error instanceof ORPCError) {
+      return c.json({ error: error.message }, (error.status || 500) as 500)
     }
-  })
+    logger.error('Failed to get tasks:', error)
+    return c.json({ tasks: [] }, 500)
+  }
+})
 
 app.post('/maa/reportStatus', zValidator('json', reportSchema), async (c) => {
-    try {
-      const data = c.req.valid('json')
-      logger.debug('Reporting task status:', data.task, data.status, data.payload?.slice(0, 30))
-
-      // Validate and get manager
-      const isValid = await dbService.validateDeviceOwnership(data.device, data.user)
-      if (!isValid) {
-        return c.text('unauthorized', 401)
-      }
-
-      const manager = await managerService.getManager(data.device, data.user)
-      const task = manager.reportStatus(data)
-      if (task) return c.text('success')
-    } catch (error) {
-      logger.error('Failed to report task status:', error)
-      return c.text('internal server error', 500)
+  try {
+    const data = c.req.valid('json')
+    // Call oRPC procedure using server-side client
+    const result = await maaClient.reportStatus(data, {
+      context: { userId: data.user, deviceId: data.device },
+    })
+    return c.text(result)
+  } catch (error) {
+    if (error instanceof ORPCError) {
+      if (error.code === 'NOT_FOUND') return c.text('task not found', 404)
+      if (error.code === 'UNAUTHORIZED') return c.text('unauthorized', 401)
     }
-    return c.text('task not found', 404)
-  })
+    logger.error('Failed to report task status:', error)
+    return c.text('internal server error', 500)
+  }
+})
 
-app.post('/maa/deviceLog', zValidator('json', deviceSchema), async (c) => {
-    const text = await c.req.text()
-    logger.debug('Received MAA Log:', text.slice(0, 100))
-    try {
-      const { device, user } = JSON.parse(text) as { device: string; user: string }
-
-      // Validate and get manager
-      const isValid = await dbService.validateDeviceOwnership(device, user)
-      if (!isValid) {
-        return c.json({ success: false, error: 'Unauthorized' }, 401)
-      }
-
-      const manager = await managerService.getManager(device, user)
-      manager.deviceLog(text)
-      return c.json({ success: true })
-    } catch (error) {
-      logger.error(`Failed to report MAA Log:\n`, error)
-      return c.json({ success: false, error: JSON.stringify(error) }, 500)
+app.post('/maa/deviceLog', async (c) => {
+  const text = await c.req.text()
+  try {
+    const { device, user } = JSON.parse(text) as { device: string; user: string }
+    // Call oRPC procedure using server-side client
+    const result = await maaClient.deviceLog(text, { context: { userId: user, deviceId: device } })
+    return c.json(result)
+  } catch (error) {
+    if (error instanceof ORPCError && error.code === 'UNAUTHORIZED') {
+      return c.json({ success: false, error: 'Unauthorized' }, 401)
     }
-  })
+    logger.error(`Failed to report MAA Log:`, error)
+    return c.json({ success: false, error: JSON.stringify(error) }, 500)
+  }
+})
 
-  // Screenshot endpoints - require auth query params
+// Screenshot endpoints - require auth query params
 app.get('/maa/screenshot.jpg', async (c) => {
-    const { device, user } = c.req.query()
+  const { device, user } = c.req.query()
+  if (!device || !user) {
+    return c.text('Unauthorized', 401)
+  }
 
-    if (!device || !user) {
-      return c.text('Unauthorized', 401)
-    }
-
-    const isValid = await dbService.validateDeviceOwnership(device, user)
-    if (!isValid) {
-      return c.text('Unauthorized', 401)
-    }
-
-    const manager = await managerService.getManager(device, user)
-    const image = await manager.getScreenshotJPEG()
+  try {
+    // Call oRPC procedure using server-side client
+    const image = await maaClient.screenshotJpg(undefined, {
+      context: { userId: user, deviceId: device },
+    })
     return c.body(image, 200, {
       'Content-Type': 'image/jpeg',
       'Content-Length': image.length.toString(),
     })
-  })
+  } catch (error) {
+    if (error instanceof ORPCError && error.code === 'UNAUTHORIZED') {
+      return c.text('Unauthorized', 401)
+    }
+    logger.error('Screenshot error:', error)
+    return c.text('Internal Server Error', 500)
+  }
+})
 
 app.get('/maa/screenshot.mjpeg', async (c) => {
-    const { device, user } = c.req.query()
+  const { device, user } = c.req.query()
+  if (!device || !user) {
+    return c.text('Unauthorized', 401)
+  }
 
+  try {
+    // This endpoint returns a streaming response - handle specially
     const isValid = await dbService.validateDeviceOwnership(device, user)
-
     if (!isValid) return c.text('Unauthorized', 401)
 
     const manager = await managerService.getManager(device, user)
     return manager.streamResponse()
-  })
+  } catch (error) {
+    logger.error('Screenshot stream error:', error)
+    return c.text('Internal Server Error', 500)
+  }
+})
 
-  // Management endpoints - require auth query params
+// Management endpoints - require auth query params
 app.get('/maa/lock', async (c) => {
-    const { device, user } = c.req.query()
+  const { device, user } = c.req.query()
+  if (!device || !user) {
+    return c.text('Unauthorized', 401)
+  }
 
+  try {
+    // Call oRPC procedure using server-side client
+    const result = await maaClient.lock(undefined, { context: { userId: user, deviceId: device } })
+    return c.text(result)
+  } catch (error) {
+    if (error instanceof ORPCError && error.code === 'UNAUTHORIZED') {
+      return c.text('Unauthorized', 401)
+    }
+    logger.error('Lock error:', error)
+    return c.text('Internal Server Error', 500)
+  }
+})
+
+app.get(
+  '/maa/unlock',
+  zValidator('query', z.object({ delay: z.number().optional().default(10) })),
+  async (c) => {
+    const { device, user } = c.req.query()
     if (!device || !user) {
       return c.text('Unauthorized', 401)
     }
 
-    const isValid = await dbService.validateDeviceOwnership(device, user)
-    if (!isValid) {
-      return c.text('Unauthorized', 401)
+    try {
+      const { delay } = c.req.valid('query')
+      // Call oRPC procedure using server-side client
+      const result = await maaClient.unlock(
+        { delay },
+        { context: { userId: user, deviceId: device } },
+      )
+      return c.text(result)
+    } catch (error) {
+      if (error instanceof ORPCError && error.code === 'UNAUTHORIZED') {
+        return c.text('Unauthorized', 401)
+      }
+      logger.error('Unlock error:', error)
+      return c.text('Internal Server Error', 500)
     }
-
-    const manager = await managerService.getManager(device, user)
-    return c.text((await manager.lock()).message)
-  })
-
-app.get(
-    '/maa/unlock',
-    zValidator('query', z.object({ delay: z.number().optional().default(10) })),
-    async (c) => {
-      const { device, user } = c.req.query()
-
-      if (!device || !user) {
-        return c.text('Unauthorized', 401)
-      }
-
-      const isValid = await dbService.validateDeviceOwnership(device, user)
-      if (!isValid) {
-        return c.text('Unauthorized', 401)
-      }
-
-      const manager = await managerService.getManager(device, user)
-      return c.text(manager.scheduleUnlock({ minutes: c.req.valid('query').delay }))
-    },
-  )
+  },
+)
 
 // In development, redirect all other routes to the Vite dev server
 if (import.meta.env.DEV) app.get('*', (c) => c.redirect('http://localhost:3113'))
@@ -346,6 +444,9 @@ else app.use(serveStatic({ root: 'dist/public', index: 'index.html' }))
 if (DEBUG) app.use(loggerMiddleware())
 
 export * from './lib/schema'
+
+// Re-export RouterClient type for client-side usage
+export type { RouterClient } from '@orpc/server'
 
 export default app
 export type { ScheduleData, TaskData }

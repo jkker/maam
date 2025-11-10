@@ -1,62 +1,31 @@
-import { QueryClient } from '@tanstack/react-query'
+import type { RouterClient, router } from '@maam/server'
+
 import { createORPCClient } from '@orpc/client'
 import { RPCLink } from '@orpc/client/fetch'
 import { createRouterUtils } from '@orpc/tanstack-query'
+import { QueryClient } from '@tanstack/react-query'
 
-// Import the router type from server
-import type { router } from '@maam/server'
+import { useAuthStore } from './auth-store'
 
 const url = '/rpc'
 
 export const queryClient = new QueryClient()
 
 /**
- * Get auth query params from localStorage
+ * Create oRPC link with auth query params from zustand store
  */
-function getAuthParams(): Record<string, string> {
-  try {
-    const authStorage = localStorage.getItem('maam-auth-storage')
-    if (!authStorage) return {}
-
-    const parsed = JSON.parse(authStorage) as { state?: { userId?: string; deviceId?: string } }
-    const state = parsed?.state
-
-    if (state?.userId && state?.deviceId) {
-      return {
-        user: state.userId,
-        device: state.deviceId,
-      }
-    }
-  } catch (error) {
-    console.error('Failed to get auth params:', error)
-  }
-  return {}
-}
-
-/**
- * oRPC client context type with auth params
- */
-interface ClientContext {
-  userId?: string
-  deviceId?: string
-}
-
-/**
- * Create oRPC link with auth query params
- */
-const link = new RPCLink<ClientContext>({
+const link = new RPCLink({
   url,
-  headers: async ({ context }) => {
-    const authParams = getAuthParams()
-    return {
-      'x-user-id': context?.userId ?? authParams.user ?? '',
-      'x-device-id': context?.deviceId ?? authParams.device ?? '',
+  fetch: async (input: RequestInfo | URL, init?: RequestInit) => {
+    // Get auth from zustand store
+    const { user, device } = useAuthStore.getState()
+
+    if (!user || !device) {
+      return fetch(input, init)
     }
-  },
-  fetch: async (input, init) => {
-    // Add auth params to URL for all requests
-    const authParams = getAuthParams()
-    const params = new URLSearchParams(authParams)
+
+    // Add auth params to URL query string
+    const params = new URLSearchParams({ user, device })
     const paramString = params.toString()
 
     let finalUrl: string
@@ -64,16 +33,14 @@ const link = new RPCLink<ClientContext>({
       finalUrl = paramString ? `${input}${input.includes('?') ? '&' : '?'}${paramString}` : input
     } else if (input instanceof URL) {
       const url = new URL(input)
-      Object.entries(authParams).forEach(([key, value]) => {
-        url.searchParams.set(key, value)
-      })
+      url.searchParams.set('user', user)
+      url.searchParams.set('device', device)
       finalUrl = url.toString()
     } else {
       // Request object
       const url = new URL(input.url)
-      Object.entries(authParams).forEach(([key, value]) => {
-        url.searchParams.set(key, value)
-      })
+      url.searchParams.set('user', user)
+      url.searchParams.set('device', device)
       finalUrl = url.toString()
     }
 
@@ -82,14 +49,12 @@ const link = new RPCLink<ClientContext>({
 })
 
 /**
- * Create oRPC client with proper typing from router
- * We cast to any intermediate to work around circular type inference
+ * Create oRPC client with proper RouterClient typing
  */
-const _client = createORPCClient(link)
-export const orpcClient = _client as any as typeof router & { __context: ClientContext }
+export const orpcClient: RouterClient<typeof router> = createORPCClient(link)
 
 /**
- * Create Tanstack Query utilities
+ * Create Tanstack Query utilities with proper type inference
  */
 export const orpc = createRouterUtils(orpcClient)
 
