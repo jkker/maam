@@ -1,27 +1,16 @@
-import { useMemo } from 'react'
-
 import { useAuthStore } from './auth-store'
 import { orpc } from './orpc'
 
 /**
  * Reactive hook for oRPC that updates when auth state changes
- * This ensures queries/mutations automatically use the latest auth credentials
+ * Returns the orpc instance which will automatically use current auth from headers callback
+ * 
+ * Note: To enable/disable queries based on auth, manually pass enabled option:
+ * useQuery(orpc.someQuery.queryOptions({ input, enabled: isAuthenticated }))
  */
 export function useRPC() {
-  // Subscribe to auth changes
-  const user = useAuthStore((state) => state.user)
-  const device = useAuthStore((state) => state.device)
+  // Subscribe to auth state for reactivity
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated)
-
-  // Return the orpc instance - it will use the latest auth from the store
-  // The useMemo ensures we don't recreate the reference unnecessarily
-  return useMemo(
-    () => ({
-      ...orpc,
-      isAuthenticated,
-      user,
-      device,
-    }),
-    [isAuthenticated, user, device],
-  )
+  
+  return { orpc, isAuthenticated }
 }

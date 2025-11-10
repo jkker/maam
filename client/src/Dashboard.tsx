@@ -68,17 +68,19 @@ import { Spinner } from './components/ui/spinner'
 import { UserMenu } from './components/UserMenu'
 import { Footer, Header } from './Layout'
 import { useAuthStore } from './lib/auth-store'
-import { invalidateQueries, orpc } from './lib/orpc'
+import { invalidateQueries } from './lib/orpc'
+import { useRPC } from './lib/use-rpc'
 import { cn, formatDuration, formatTaskType, formatTime } from './utils'
 
 export default function Dashboard() {
+  const { orpc, isAuthenticated } = useRPC()
   const {
     data: locked = false,
     isSuccess,
     isError,
     isPending,
     isFetching,
-  } = useQuery(orpc.locked.queryOptions())
+  } = useQuery(orpc.locked.queryOptions({ input: undefined, enabled: isAuthenticated }))
 
   return (
     <>
@@ -228,6 +230,7 @@ const stageOptionsList = STAGE_OPTIONS.map(({ id, label, weekdays }) => {
   }
 })
 function QuickActions({ locked, connected }: { locked: boolean; connected: boolean }) {
+  const { orpc } = useRPC()
   const [stagePopoverOpen, setStagePopoverOpen] = useState(false)
   const [selectedStage, setSelectedStage] = useState<string | null>(null)
 
@@ -411,15 +414,17 @@ function formatDayGroupLabel(day: Temporal.ZonedDateTime, now: Temporal.ZonedDat
 }
 
 function TaskManager({ className }: { className?: string }) {
+  const { orpc, isAuthenticated } = useRPC()
   // Use live query options for real-time updates via event iterator
   const { data: tasks = [] } = useQuery(
     orpc.tasks.experimental_liveOptions({
       input: undefined,
       retry: true, // Infinite retry for reliable streaming
+      enabled: isAuthenticated,
     }),
   )
   const { data: schedules = [], isLoading: schedulesLoading } = useQuery(
-    orpc.schedule.get.queryOptions(),
+    orpc.schedule.get.queryOptions({ input: undefined, enabled: isAuthenticated }),
   )
   const [searchQuery, setSearchQuery] = useState('')
   const timezone = useMemo(() => Temporal.Now.timeZoneId(), [])
@@ -868,6 +873,7 @@ function LockToggle({
   connected: boolean
   className?: string
 }) {
+  const { orpc } = useRPC()
   const { variables, mutate, isPending } = useMutation(
     orpc.toggleLock.mutationOptions({
       onSettled: () => invalidateQueries({ queryKey: orpc.locked.queryKey() }),
@@ -904,11 +910,13 @@ function LockToggle({
 }
 
 export function LogViewer({ className }: { className?: string }) {
+  const { orpc, isAuthenticated } = useRPC()
   // Use live query options for real-time log updates via event iterator
   const { data: logs = [] } = useQuery(
     orpc.deviceLog.experimental_liveOptions({
       input: undefined,
       retry: true, // Infinite retry for reliable streaming
+      enabled: isAuthenticated,
     }),
   )
 

@@ -1,3 +1,5 @@
+import type { RequestHeadersPluginContext } from '@orpc/server/plugins'
+
 import type { MaaManager } from './MaaManager'
 import type { TaskData } from './Task'
 import type { ScheduleData } from './TaskSchedule'
@@ -6,6 +8,7 @@ import { serveStatic } from '@hono/node-server/serve-static'
 import { zValidator } from '@hono/zod-validator'
 import { ORPCError, os } from '@orpc/server'
 import { RPCHandler } from '@orpc/server/fetch'
+import { RequestHeadersPlugin } from '@orpc/server/plugins'
 import { Hono } from 'hono'
 import { compress } from 'hono/compress'
 import { logger as loggerMiddleware } from 'hono/logger'
@@ -24,41 +27,80 @@ interface VariablesContext {
   device: string
 }
 
-interface AuthContext {
+/**
+ * Auth context with request headers support
+ */
+interface AuthContext extends RequestHeadersPluginContext {
   user?: string
   device?: string
   manager?: MaaManager
 }
 
 /**
- * Base oRPC procedure with optional auth context
+ * Base oRPC procedure with request headers plugin context
  */
 const base = os.$context<AuthContext>()
 
 /**
  * Authentication middleware for oRPC procedures
- * Extracts device and user from context and validates
+ * Extracts device and user from HTTP headers (x-maam-user, x-maam-device)
+ * Performs handshake validation by sending heartbeat and verifying response
  */
 const authMiddleware = base.middleware(async ({ context, next }) => {
-  const user = context.user
-  const device = context.device
+  // Extract auth from HTTP headers (OpenAPI 3.x compliant)
+  const user = context.reqHeaders?.get('x-maam-user')
+  const device = context.reqHeaders?.get('x-maam-device')
 
   if (!user || !device) {
     throw new ORPCError('UNAUTHORIZED', {
-      message: 'Missing authentication credentials',
+      message: 'Missing authentication credentials in headers',
     })
   }
 
   // Validate device ownership
   const isValid = await dbService.validateDeviceOwnership(device, user)
+  
   if (!isValid) {
-    // Auto-create if not exists
+    // First-time authentication - create user and device
     await dbService.getUserOrCreate(user)
     await dbService.getDeviceOrCreate(device, user)
   }
 
   // Get manager for this user+device
   const manager = await managerService.getManager(device, user)
+
+  // Perform handshake validation only for new authentications
+  // Skip handshake for existing valid devices to avoid breaking existing workflows
+  if (!isValid) {
+    try {
+      // First-time authentication - verify device is online with heartbeat
+      const heartbeatTask = manager.create('HeartBeat')
+      await heartbeatTask.waitFor('RUNNING', { seconds: 5 })
+      
+      // Wait for device to report back
+      await heartbeatTask.waitFor('DONE', { seconds: 10 })
+      
+      // First successful handshake - create default schedules
+      logger.info(`First successful auth for ${user}@${device}, creating default schedules`)
+      
+      // Create default schedules for LinkStart at 04:00, 12:00, and 20:00
+      // Use system timezone (each schedule can specify timezone if needed)
+      const defaultHours = [4, 12, 20]
+      for (const hour of defaultHours) {
+        manager.addSchedule({
+          task: 'LinkStart',
+          hour,
+          minute: 0,
+        })
+      }
+    } catch (error) {
+      logger.error('Handshake validation failed:', error)
+      throw new ORPCError('UNAUTHORIZED', {
+        message: 'Device handshake failed - device may be offline or credentials mismatch',
+        cause: error,
+      })
+    }
+  }
 
   return next({
     context: {
@@ -79,6 +121,7 @@ export const router = {
   auth: {
     /**
      * Register or login a user with their device
+     * Does NOT perform handshake - just creates/validates credentials
      */
     login: base
       .input(
@@ -104,6 +147,14 @@ export const router = {
           })
         }
       }),
+    
+    /**
+     * Test heartbeat to verify device is online
+     * This triggers handshake validation
+     */
+    heartbeat: protectedProcedure.handler(({ context: { manager } }) => {
+      return { online: true, device: manager.device, user: manager.user }
+    }),
   },
 
   // Manager control procedures
@@ -177,27 +228,23 @@ export const router = {
 /**
  * Export type for use in client
  */
-/**
- * Export type for use in client
- */
 export type ORPCRouter = typeof router
 
 export const app = new Hono<{ Variables: VariablesContext }>().use(compress())
 
-// Setup oRPC handler for main API
+// Setup oRPC handler with RequestHeadersPlugin for auth via HTTP headers
 const rpcHandler = new RPCHandler(router, {
+  plugins: [
+    new RequestHeadersPlugin(),
+  ],
   interceptors: [],
 })
 
 // Mount oRPC handler for main API
 app.use('/rpc/*', async (c, next) => {
-  // Extract auth from query params - simplified naming
-  const user = c.req.query('user') || undefined
-  const device = c.req.query('device') || undefined
-
   const { matched, response } = await rpcHandler.handle(c.req.raw, {
     prefix: '/rpc',
-    context: { user, device }, // Provide initial context
+    context: {}, // Context populated by RequestHeadersPlugin
   })
 
   if (matched) {

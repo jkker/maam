@@ -9,85 +9,45 @@ import { useAuthStore } from './auth-store'
 
 const url = '/rpc'
 
-export const queryClient = new QueryClient()
+export const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      // Disable all queries by default until authenticated
+      enabled: false,
+      retry: false,
+    },
+  },
+})
 
 /**
- * Client context type for auth information
+ * Create oRPC link with auth via HTTP headers (OpenAPI 3.x compliant)
+ * Uses x-maam-user and x-maam-device headers for authentication
  */
-interface ClientContext {
-  user?: string
-  device?: string
-}
-
-/**
- * Create oRPC link with auth injection via interceptor
- * Auth info is automatically read from zustand store and added to query params
- */
-const link = new RPCLink<ClientContext>({
+const link = new RPCLink({
   url,
   /**
-   * Interceptor to automatically inject auth from zustand store into context
-   * This runs before every request
+   * Headers callback to inject auth from zustand store
+   * This follows OpenAPI 3.x best practices for custom auth headers
    */
-  interceptors: [
-    ({ next, context, path, input }) => {
-      // Get current auth from store (using IIFE to bind properly)
-      const authState = (() => useAuthStore.getState.bind(useAuthStore)())()
-
-      // Inject auth into context for this request
-      return next({
-        context: {
-          ...context,
-          user: context.user || authState.user,
-          device: context.device || authState.device,
-        },
-        path,
-        input,
-      })
-    },
-  ],
-  /**
-   * Custom fetch to add auth as URL query params
-   */
-  fetch: async (input, init, { context }) => {
-    const user = context.user
-    const device = context.device
-
+  headers: () => {
+    const { user, device } = useAuthStore.getState()
+    
+    // Only add headers if authenticated
     if (!user || !device) {
-      return fetch(input, init)
+      return {}
     }
 
-    // Add auth params to URL query string
-    const params = new URLSearchParams({ user, device })
-    const paramString = params.toString()
-
-    let finalUrl: string | URL | Request
-    if (typeof input === 'string') {
-      const inputStr: string = input
-      finalUrl = paramString
-        ? `${inputStr}${inputStr.includes('?') ? '&' : '?'}${paramString}`
-        : inputStr
-    } else if (input instanceof URL) {
-      const url = new URL(input)
-      url.searchParams.set('user', user)
-      url.searchParams.set('device', device)
-      finalUrl = url
-    } else {
-      // Request object
-      const url = new URL(input.url)
-      url.searchParams.set('user', user)
-      url.searchParams.set('device', device)
-      finalUrl = url
+    return {
+      'x-maam-user': user,
+      'x-maam-device': device,
     }
-
-    return fetch(finalUrl, init)
   },
 })
 
 /**
  * Create oRPC client with proper type inference from router
  */
-export const orpcClient: RouterClient<typeof router, ClientContext> = createORPCClient(link)
+export const orpcClient: RouterClient<typeof router> = createORPCClient(link)
 
 /**
  * Create Tanstack Query utilities with proper type inference
