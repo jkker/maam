@@ -3,9 +3,9 @@ import type { TaskData } from './Task'
 import type { ScheduleData } from './TaskSchedule'
 
 import { serveStatic } from '@hono/node-server/serve-static'
-import { trpcServer } from '@hono/trpc-server'
 import { zValidator } from '@hono/zod-validator'
-import { initTRPC, TRPCError } from '@trpc/server'
+import { ORPCError, os } from '@orpc/server'
+import { RPCHandler } from '@orpc/server/fetch'
 import { Hono } from 'hono'
 import { compress } from 'hono/compress'
 import { logger as loggerMiddleware } from 'hono/logger'
@@ -27,22 +27,24 @@ interface VariablesContext {
 interface AuthContext {
   userId?: string
   deviceId?: string
+  manager?: MaaManager
 }
 
-const t = initTRPC.context<AuthContext>().create({ sse: { ping: { enabled: false } } })
+/**
+ * Base oRPC procedure with optional auth context
+ */
+const base = os.$context<AuthContext>()
 
 /**
- * Authentication middleware for tRPC procedures
- * Extracts device and user from request headers
+ * Authentication middleware for oRPC procedures
+ * Extracts device and user from context and validates
  */
-const authMiddleware = t.middleware(async ({ ctx, next }) => {
-  // In tRPC, we'll receive auth from headers or meta
-  const userId = ctx.userId
-  const deviceId = ctx.deviceId
+const authMiddleware = base.middleware(async ({ context, next }) => {
+  const userId = context.userId
+  const deviceId = context.deviceId
 
   if (!userId || !deviceId) {
-    throw new TRPCError({
-      code: 'UNAUTHORIZED',
+    throw new ORPCError('UNAUTHORIZED', {
       message: 'Missing authentication credentials',
     })
   }
@@ -59,7 +61,7 @@ const authMiddleware = t.middleware(async ({ ctx, next }) => {
   const manager = await managerService.getManager(deviceId, userId)
 
   return next({
-    ctx: {
+    context: {
       manager,
       userId,
       deviceId,
@@ -67,18 +69,18 @@ const authMiddleware = t.middleware(async ({ ctx, next }) => {
   })
 })
 
-const protectedProcedure = t.procedure.use(authMiddleware)
+const protectedProcedure = base.use(authMiddleware)
 
 /**
- * Main application router combining all sub-routers
+ * Main application router combining all procedures
  */
-export const router = t.router({
+export const router = {
   // Authentication procedures
   auth: {
     /**
      * Register or login a user with their device
      */
-    login: t.procedure
+    login: base
       .input(
         z.object({
           user: z.string().min(1),
@@ -86,7 +88,7 @@ export const router = t.router({
           label: z.string().optional(),
         }),
       )
-      .mutation(async ({ input }) => {
+      .handler(async ({ input }) => {
         try {
           await dbService.getUserOrCreate(input.user)
           await dbService.getDeviceOrCreate(input.device, input.user, input.label)
@@ -97,8 +99,7 @@ export const router = t.router({
           return { success: true, userId: input.user, deviceId: input.device }
         } catch (error) {
           logger.error('Login failed:', error)
-          throw new TRPCError({
-            code: 'INTERNAL_SERVER_ERROR',
+          throw new ORPCError('INTERNAL_SERVER_ERROR', {
             message: 'Failed to authenticate',
           })
         }
@@ -106,23 +107,27 @@ export const router = t.router({
   },
 
   // Manager control procedures
-  start: protectedProcedure.mutation(async ({ ctx: { manager } }) => manager.start()),
-  stop: protectedProcedure.mutation(async ({ ctx: { manager } }) => manager.stop()),
+  start: protectedProcedure.handler(async ({ context: { manager } }) => manager.start()),
+  stop: protectedProcedure.handler(async ({ context: { manager } }) => manager.stop()),
 
   // Lock control procedures
-  locked: protectedProcedure.query(({ ctx: { manager } }) => manager.locked),
+  locked: protectedProcedure.handler(({ context: { manager } }) => manager.locked),
   toggleLock: protectedProcedure
     .input(z.boolean())
-    .mutation(async ({ ctx: { manager }, input }) => (input ? manager.lock() : manager.unlock())),
+    .handler(async ({ context: { manager }, input }) =>
+      input ? manager.lock() : manager.unlock(),
+    ),
 
   schedule: {
-    get: protectedProcedure.query(({ ctx: { manager } }) => manager.schedules.map((s) => s.data)),
+    get: protectedProcedure.handler(({ context: { manager } }) =>
+      manager.schedules.map((s) => s.data),
+    ),
     add: protectedProcedure
       .input(scheduleSchema)
-      .mutation(({ ctx: { manager }, input }) => manager.addSchedule(input)),
+      .handler(({ context: { manager }, input }) => manager.addSchedule(input)),
     remove: protectedProcedure
       .input(z.string())
-      .mutation(({ ctx: { manager }, input }) => manager.removeSchedule(input)),
+      .handler(({ context: { manager }, input }) => manager.removeSchedule(input)),
     postpone: protectedProcedure
       .input(
         z.object({
@@ -130,10 +135,12 @@ export const router = t.router({
           until: z.string().optional(),
         }),
       )
-      .mutation(({ ctx: { manager }, input }) => manager.postponeSchedule(input.id, input.until)),
+      .handler(({ context: { manager }, input }) =>
+        manager.postponeSchedule(input.id, input.until),
+      ),
     resume: protectedProcedure
       .input(z.string())
-      .mutation(({ ctx: { manager }, input }) => manager.resumeSchedule(input)),
+      .handler(({ context: { manager }, input }) => manager.resumeSchedule(input)),
   },
 
   /**
@@ -146,8 +153,8 @@ export const router = t.router({
         params: z.string().optional(),
       }),
     )
-    .mutation(({ ctx, input }) => {
-      const task = ctx.manager.create(input.task, input.params)
+    .handler(({ context, input }) => {
+      const task = context.manager.create(input.task, input.params)
       return { success: true, task: task.data }
     }),
 
@@ -155,41 +162,51 @@ export const router = t.router({
    * Subscription for real-time task updates
    * Emits task data whenever task state changes
    */
-  tasks: protectedProcedure.subscription(({ ctx, signal }) =>
-    ctx.manager.listen('update', { signal }),
-  ),
-
-  deviceLog: protectedProcedure.subscription(async function* ({ ctx, signal }) {
-    yield ctx.manager.logs.slice(-50)
-    yield* ctx.manager.listen('deviceLog', { signal })
+  tasks: protectedProcedure.handler(async function* ({ context, signal }) {
+    yield* context.manager.listen('update', { signal })
   }),
 
-  eventCalendar: t.procedure.query(async () => fetchUpcomingEvents()),
-})
+  deviceLog: protectedProcedure.handler(async function* ({ context, signal }) {
+    yield context.manager.logs.slice(-50)
+    yield* context.manager.listen('deviceLog', { signal })
+  }),
+
+  eventCalendar: base.handler(async () => fetchUpcomingEvents()),
+}
 
 /**
  * Export type for use in client
  */
-export type TRPCRouter = typeof router
+export type ORPCRouter = typeof router
 
-export const app = new Hono<{ Variables: VariablesContext }>()
-  .use(compress())
-  .use(
-    '/trpc/*',
-    trpcServer({
-      router,
-      createContext: (opts, c) => {
-        // Extract auth from query params using Hono's context
-        const userId = c.req.query('user') || undefined
-        const deviceId = c.req.query('device') || undefined
-        return { userId, deviceId }
-      },
-    }),
-  )
+export const app = new Hono<{ Variables: VariablesContext }>().use(compress())
 
-  // MAA remote control protocol endpoints
-  // These require device+user authentication
-  .post('/maa/getTask', zValidator('json', deviceSchema), async (c) => {
+// Setup oRPC handler
+const rpcHandler = new RPCHandler(router, {
+  interceptors: [],
+})
+
+// Mount oRPC handler
+app.use('/rpc/*', async (c, next) => {
+  // Extract auth from query params
+  const userId = c.req.query('user') || undefined
+  const deviceId = c.req.query('device') || undefined
+
+  const { matched, response } = await rpcHandler.handle(c.req.raw, {
+    prefix: '/rpc',
+    context: { userId, deviceId }, // Provide initial context
+  })
+
+  if (matched) {
+    return c.newResponse(response.body, response)
+  }
+
+  await next()
+})
+
+// MAA remote control protocol endpoints
+// These require device+user authentication
+app.post('/maa/getTask', zValidator('json', deviceSchema), async (c) => {
     try {
       const { device, user } = c.req.valid('json')
 
@@ -209,7 +226,7 @@ export const app = new Hono<{ Variables: VariablesContext }>()
     }
   })
 
-  .post('/maa/reportStatus', zValidator('json', reportSchema), async (c) => {
+app.post('/maa/reportStatus', zValidator('json', reportSchema), async (c) => {
     try {
       const data = c.req.valid('json')
       logger.debug('Reporting task status:', data.task, data.status, data.payload?.slice(0, 30))
@@ -230,7 +247,7 @@ export const app = new Hono<{ Variables: VariablesContext }>()
     return c.text('task not found', 404)
   })
 
-  .post('/maa/deviceLog', zValidator('json', deviceSchema), async (c) => {
+app.post('/maa/deviceLog', zValidator('json', deviceSchema), async (c) => {
     const text = await c.req.text()
     logger.debug('Received MAA Log:', text.slice(0, 100))
     try {
@@ -252,7 +269,7 @@ export const app = new Hono<{ Variables: VariablesContext }>()
   })
 
   // Screenshot endpoints - require auth query params
-  .get('/maa/screenshot.jpg', async (c) => {
+app.get('/maa/screenshot.jpg', async (c) => {
     const { device, user } = c.req.query()
 
     if (!device || !user) {
@@ -272,7 +289,7 @@ export const app = new Hono<{ Variables: VariablesContext }>()
     })
   })
 
-  .get('/maa/screenshot.mjpeg', async (c) => {
+app.get('/maa/screenshot.mjpeg', async (c) => {
     const { device, user } = c.req.query()
 
     const isValid = await dbService.validateDeviceOwnership(device, user)
@@ -284,7 +301,7 @@ export const app = new Hono<{ Variables: VariablesContext }>()
   })
 
   // Management endpoints - require auth query params
-  .get('/maa/lock', async (c) => {
+app.get('/maa/lock', async (c) => {
     const { device, user } = c.req.query()
 
     if (!device || !user) {
@@ -300,7 +317,7 @@ export const app = new Hono<{ Variables: VariablesContext }>()
     return c.text((await manager.lock()).message)
   })
 
-  .get(
+app.get(
     '/maa/unlock',
     zValidator('query', z.object({ delay: z.number().optional().default(10) })),
     async (c) => {

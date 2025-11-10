@@ -31,9 +31,8 @@
   },
   "dependencies": {
     "@hono/node-server": "^1.19.5",
-    "@hono/trpc-server": "^0.4.0",
     "@hono/zod-validator": "^0.7.4",
-    "@trpc/server": "^11.7.1",
+    "@orpc/server": "^1.11.0",
     "better-sqlite3": "^12.4.1",
     "cheerio": "^1.1.2",
     "drizzle-orm": "^0.44.7",

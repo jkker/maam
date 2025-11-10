@@ -2,7 +2,6 @@ import type { ScheduleData, TaskData } from '@maam/server'
 
 import { STAGE_OPTIONS } from '@maam/server/const'
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { useSubscription } from '@trpc/tanstack-react-query'
 
 import {
   Check,
@@ -69,7 +68,7 @@ import { Spinner } from './components/ui/spinner'
 import { UserMenu } from './components/UserMenu'
 import { Footer, Header } from './Layout'
 import { useAuthStore } from './lib/auth-store'
-import { invalidateQueries, trpc } from './lib/trpc'
+import { invalidateQueries, orpc } from './lib/orpc'
 import { cn, formatDuration, formatTaskType, formatTime } from './utils'
 
 export default function Dashboard() {
@@ -79,7 +78,7 @@ export default function Dashboard() {
     isError,
     isPending,
     isFetching,
-  } = useQuery(trpc.locked.queryOptions())
+  } = useQuery(orpc.locked.queryOptions())
 
   return (
     <>
@@ -232,11 +231,11 @@ function QuickActions({ locked, connected }: { locked: boolean; connected: boole
   const [stagePopoverOpen, setStagePopoverOpen] = useState(false)
   const [selectedStage, setSelectedStage] = useState<string | null>(null)
 
-  const start = useMutation(trpc.start.mutationOptions({ onSuccess: () => invalidateQueries() }))
-  const stop = useMutation(trpc.stop.mutationOptions({ onSuccess: () => invalidateQueries() }))
+  const start = useMutation(orpc.start.mutationOptions({ onSuccess: () => invalidateQueries() }))
+  const stop = useMutation(orpc.stop.mutationOptions({ onSuccess: () => invalidateQueries() }))
 
   const dispatch = useMutation(
-    trpc.dispatch.mutationOptions({
+    orpc.dispatch.mutationOptions({
       onSuccess: () => {
         void invalidateQueries()
         setStagePopoverOpen(false)
@@ -412,16 +411,20 @@ function formatDayGroupLabel(day: Temporal.ZonedDateTime, now: Temporal.ZonedDat
 }
 
 function TaskManager({ className }: { className?: string }) {
-  const { data: tasks = [], status } = useSubscription(trpc.tasks.subscriptionOptions())
+  // Use polling for real-time updates until SSE is properly configured
+  const { data: tasks = [], status } = useQuery({
+    ...orpc.tasks.queryOptions({ input: undefined }),
+    refetchInterval: 2000, // Poll every 2 seconds
+  })
   const { data: schedules = [], isLoading: schedulesLoading } = useQuery(
-    trpc.schedule.get.queryOptions(),
+    orpc.schedule.get.queryOptions(),
   )
   const [searchQuery, setSearchQuery] = useState('')
   const timezone = useMemo(() => Temporal.Now.timeZoneId(), [])
-  const scheduleQueryKey = trpc.schedule.get.queryKey()
+  const scheduleQueryKey = orpc.schedule.get.queryKey()
 
   const postponeMutation = useMutation(
-    trpc.schedule.postpone.mutationOptions({
+    orpc.schedule.postpone.mutationOptions({
       onSuccess: (data) => {
         toast.success('Next run postponed', {
           description: data.cooldownUntil
@@ -436,7 +439,7 @@ function TaskManager({ className }: { className?: string }) {
   )
 
   const resumeMutation = useMutation(
-    trpc.schedule.resume.mutationOptions({
+    orpc.schedule.resume.mutationOptions({
       onSuccess: () => {
         toast.success('Schedule restored')
         void invalidateQueries({ queryKey: scheduleQueryKey })
@@ -446,7 +449,7 @@ function TaskManager({ className }: { className?: string }) {
   )
 
   const removeScheduleMutation = useMutation(
-    trpc.schedule.remove.mutationOptions({
+    orpc.schedule.remove.mutationOptions({
       onSuccess: () => {
         toast.success('Schedule deleted')
         void invalidateQueries({ queryKey: scheduleQueryKey })
@@ -864,8 +867,8 @@ function LockToggle({
   className?: string
 }) {
   const { variables, mutate, isPending } = useMutation(
-    trpc.toggleLock.mutationOptions({
-      onSettled: () => invalidateQueries({ queryKey: trpc.locked.queryKey() }),
+    orpc.toggleLock.mutationOptions({
+      onSettled: () => invalidateQueries({ queryKey: orpc.locked.queryKey() }),
       onSuccess: ({ message, success }) => (success ? toast.success : toast.error)(message),
       onError: (error) =>
         toast.error(error.data ? 'Lock Failed' : 'Unlock Failed', { description: error.message }),
@@ -899,7 +902,11 @@ function LockToggle({
 }
 
 export function LogViewer({ className }: { className?: string }) {
-  const { data: logs = [] } = useSubscription(trpc.deviceLog.subscriptionOptions())
+  // Use polling for real-time log updates
+  const { data: logs = [] } = useQuery({
+    ...orpc.deviceLog.queryOptions({ input: undefined }),
+    refetchInterval: 2000, // Poll every 2 seconds
+  })
 
   return (
     <Card className={cn(className)}>

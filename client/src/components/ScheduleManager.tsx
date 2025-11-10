@@ -19,7 +19,7 @@ import 'temporal-polyfill/global'
 import { useTheme } from '@/hooks/useTheme'
 import { cn, formatTaskType, formatTime } from '@/utils'
 
-import { queryClient, trpc } from '../lib/trpc'
+import { queryClient, orpc } from '../lib/orpc'
 import { Button } from './ui/button'
 import { Card, CardHeader, CardTitle } from './ui/card'
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from './ui/dialog'
@@ -28,7 +28,7 @@ import { Label } from './ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select'
 import { Spinner } from './ui/spinner'
 
-const queryKey = trpc.schedule.get.queryKey()
+const queryKey = orpc.schedule.get.queryKey()
 
 const browserTz = Temporal.Now.timeZoneId()
 
@@ -44,9 +44,9 @@ export const ScheduleManager = ({
   const [datetimeToAdd, setDateTimeToAdd] = useState<Temporal.ZonedDateTime>()
   const [scheduleIdToEdit, setScheduleIdEdit] = useState<string>()
 
-  const { data: schedules = [] } = useQuery(trpc.schedule.get.queryOptions())
+  const { data: schedules = [] } = useQuery(orpc.schedule.get.queryOptions())
   const { data: officialEvents = [] } = useQuery(
-    trpc.eventCalendar.queryOptions(undefined, {
+    orpc.eventCalendar.queryOptions(undefined, {
       refetchInterval: 1000 * 60 * 60, // 60 minutes
     }),
   )
@@ -242,7 +242,7 @@ function AddScheduleDialog({
   })
 
   const addMutation = useMutation(
-    trpc.schedule.add.mutationOptions({
+    orpc.schedule.add.mutationOptions({
       onSuccess: () => {
         void queryClient.invalidateQueries({ queryKey })
         onClose()
@@ -312,7 +312,7 @@ function EditScheduleDialog({
   onClose: () => void
 }) {
   const removeMutation = useMutation(
-    trpc.schedule.remove.mutationOptions({
+    orpc.schedule.remove.mutationOptions({
       onSuccess: () => {
         void queryClient.invalidateQueries({ queryKey })
         onClose()
