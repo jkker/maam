@@ -1,61 +1,44 @@
-import fs from 'node:fs'
-
-import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 
 import { MaaDeviceFixture } from './fixture'
-import { runMigrations, closeDatabase } from '../lib/db'
 import { managerService } from '../lib/managers'
+
+// Mock database service
+vi.mock('../lib/db/service', () => ({
+  saveTask: vi.fn().mockResolvedValue(undefined),
+  updateTask: vi.fn().mockResolvedValue(undefined),
+  saveSchedule: vi.fn().mockResolvedValue(undefined),
+  updateSchedule: vi.fn().mockResolvedValue(undefined),
+  deleteSchedule: vi.fn().mockResolvedValue(undefined),
+  getSchedulesByDevice: vi.fn().mockResolvedValue([]),
+  saveManagerState: vi.fn().mockResolvedValue(undefined),
+  updateManagerLockState: vi.fn().mockResolvedValue(undefined),
+  getManagerState: vi.fn().mockResolvedValue(null),
+  saveDeviceLog: vi.fn().mockResolvedValue(undefined),
+  getUserOrCreate: vi.fn().mockResolvedValue({ id: 'test-user-unlock', name: 'test-user-unlock' }),
+  getDeviceOrCreate: vi
+    .fn()
+    .mockResolvedValue({ id: 'test-device-unlock', userId: 'test-user-unlock' }),
+  validateDeviceOwnership: vi.fn().mockResolvedValue(true),
+}))
 
 // Test credentials
 const TEST_DEVICE = 'test-device-unlock'
 const TEST_USER = 'test-user-unlock'
 
-// Helper function to clean up database files
-function cleanupTestDatabase(dbPath: string) {
-  const files = [dbPath, `${dbPath}-shm`, `${dbPath}-wal`]
-  files.forEach((file) => {
-    try {
-      if (fs.existsSync(file)) fs.unlinkSync(file)
-    } catch (e) {
-      // Ignore errors
-    }
-  })
-}
-
-// Helper function to setup test environment
-async function setupTestEnvironment(dbPath: string): Promise<MaaDeviceFixture> {
-  process.env.DATABASE_PATH = dbPath
-  cleanupTestDatabase(dbPath)
-  runMigrations()
-
-  // Get or create manager for test device
-  const manager = await managerService.getManager(TEST_DEVICE, TEST_USER)
-
-  return new MaaDeviceFixture(manager)
-}
-
-// Helper function to cleanup test environment
-function cleanupTestEnvironment(fixture: MaaDeviceFixture, dbPath: string) {
-  fixture.cleanup()
-  try {
-    managerService.removeManager(TEST_DEVICE, TEST_USER)
-    closeDatabase()
-  } catch (e) {
-    // Ignore errors
-  }
-  cleanupTestDatabase(dbPath)
-}
-
 describe('HTTP Unlock Endpoint', () => {
-  const testDbPath = `/tmp/test-maam-unlock-${Date.now()}.db`
   let fixture: MaaDeviceFixture
 
   beforeEach(async () => {
-    fixture = await setupTestEnvironment(testDbPath)
+    // Get or create manager for test device
+    const manager = await managerService.getManager(TEST_DEVICE, TEST_USER)
+    fixture = new MaaDeviceFixture(manager)
   })
 
   afterEach(() => {
-    cleanupTestEnvironment(fixture, testDbPath)
+    fixture.cleanup()
+    managerService.removeManager(TEST_DEVICE, TEST_USER)
+    vi.clearAllMocks()
   })
 
   it('should schedule delayed unlock with default 10 minute delay', async () => {
@@ -182,15 +165,17 @@ describe('HTTP Unlock Endpoint', () => {
 })
 
 describe('tRPC unlock vs HTTP unlock', () => {
-  const testDbPath = `/tmp/test-maam-trpc-unlock-${Date.now()}.db`
   let fixture: MaaDeviceFixture
 
   beforeEach(async () => {
-    fixture = await setupTestEnvironment(testDbPath)
+    const manager = await managerService.getManager(TEST_DEVICE, TEST_USER)
+    fixture = new MaaDeviceFixture(manager)
   })
 
   afterEach(() => {
-    cleanupTestEnvironment(fixture, testDbPath)
+    fixture.cleanup()
+    managerService.removeManager(TEST_DEVICE, TEST_USER)
+    vi.clearAllMocks()
   })
 
   it('should unlock immediately when using manager.unlock() directly (tRPC behavior)', async () => {

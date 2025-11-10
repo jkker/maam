@@ -12,15 +12,11 @@ import { logger as loggerMiddleware } from 'hono/logger'
 import { z } from 'zod'
 
 import { TASK_TYPE, MJPEG_BOUNDARY } from './const'
-import { runMigrations } from './lib/db'
 import * as dbService from './lib/db/service'
 import { DEBUG, logger } from './lib/logger'
 import { managerService } from './lib/managers'
 import { fetchUpcomingEvents } from './lib/prts.wiki'
 import { reportSchema, scheduleSchema, deviceSchema } from './lib/schema'
-
-// Run database migrations
-runMigrations()
 
 interface VariablesContext {
   manager: MaaManager

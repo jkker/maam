@@ -8,6 +8,3 @@ export const db = drizzle('maam.db', { schema })
  * Close database connection (for testing)
  */
 export function closeDatabase() {}
-
-// Export migration utilities
-export { runMigrations } from './migrate'

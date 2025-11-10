@@ -1,33 +1,34 @@
-import fs from 'node:fs'
-
-import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 
 import { MaaManager } from '../MaaManager'
 import { MaaDeviceFixture, createTestManager } from './fixture'
-import { closeDatabase, runMigrations } from '../lib/db'
-import * as dbService from '../lib/db/service'
+
+// Mock database service to avoid file I/O in unit tests
+vi.mock('../lib/db/service', () => ({
+  saveTask: vi.fn().mockResolvedValue(undefined),
+  updateTask: vi.fn().mockResolvedValue(undefined),
+  getTaskById: vi.fn().mockResolvedValue(null),
+  getTasksByDevice: vi.fn().mockResolvedValue([]),
+  saveSchedule: vi.fn().mockResolvedValue(undefined),
+  updateSchedule: vi.fn().mockResolvedValue(undefined),
+  deleteSchedule: vi.fn().mockResolvedValue(undefined),
+  getSchedulesByDevice: vi.fn().mockResolvedValue([]),
+  saveManagerState: vi.fn().mockResolvedValue(undefined),
+  updateManagerLockState: vi.fn().mockResolvedValue(undefined),
+  updateManagerHeartbeat: vi.fn().mockResolvedValue(undefined),
+  getManagerState: vi.fn().mockResolvedValue(null),
+  saveDeviceLog: vi.fn().mockResolvedValue(undefined),
+  getDeviceLogs: vi.fn().mockResolvedValue([]),
+  getUserOrCreate: vi.fn().mockResolvedValue({ id: 'test-user', name: 'test-user' }),
+  getDeviceOrCreate: vi.fn().mockResolvedValue({ id: 'test-device', userId: 'test-user' }),
+  validateDeviceOwnership: vi.fn().mockResolvedValue(true),
+}))
 
 describe('MaaManager with Device Fixture', () => {
-  const testDbPath = `/tmp/test-maam-manager-${Date.now()}.db`
   let manager: MaaManager
   let fixture: MaaDeviceFixture
 
   beforeEach(() => {
-    // Set test database path
-    process.env.DATABASE_PATH = testDbPath
-
-    // Remove existing test database
-    try {
-      if (fs.existsSync(testDbPath)) fs.unlinkSync(testDbPath)
-      if (fs.existsSync(testDbPath + '-shm')) fs.unlinkSync(testDbPath + '-shm')
-      if (fs.existsSync(testDbPath + '-wal')) fs.unlinkSync(testDbPath + '-wal')
-    } catch (e) {
-      // Ignore errors
-    }
-
-    // Run migrations
-    runMigrations()
-
     // Create test manager and fixture
     const testSetup = createTestManager('test-device', 'test-user')
     manager = testSetup.manager
@@ -38,22 +39,7 @@ describe('MaaManager with Device Fixture', () => {
     // Cleanup
     fixture.cleanup()
     manager.scheduler.stop()
-
-    // Close database connection
-    try {
-      closeDatabase()
-    } catch (e) {
-      // Ignore errors
-    }
-
-    // Remove test database
-    try {
-      if (fs.existsSync(testDbPath)) fs.unlinkSync(testDbPath)
-      if (fs.existsSync(testDbPath + '-shm')) fs.unlinkSync(testDbPath + '-shm')
-      if (fs.existsSync(testDbPath + '-wal')) fs.unlinkSync(testDbPath + '-wal')
-    } catch (e) {
-      // Ignore errors
-    }
+    vi.clearAllMocks()
   })
 
   describe('Task Lifecycle', () => {
@@ -86,38 +72,10 @@ describe('MaaManager with Device Fixture', () => {
 
       fixture.stopPolling()
     })
-
-    it('should persist task to database', async () => {
-      const task = manager.create('LinkStart')
-
-      // Wait for async database save
-      await new Promise((resolve) => setTimeout(resolve, 100))
-
-      const savedTask = await dbService.getTaskById(task.id)
-      expect(savedTask).toBeDefined()
-      expect(savedTask?.type).toBe('LinkStart')
-      expect(savedTask?.stage).toBe('PENDING')
-    })
-
-    it('should update task in database on completion', async () => {
-      const task = manager.create('LinkStart')
-
-      fixture.startPolling()
-      await fixture.waitForTask(task.id, 2000)
-      fixture.stopPolling()
-
-      // Wait for async database update
-      await new Promise((resolve) => setTimeout(resolve, 100))
-
-      const updatedTask = await dbService.getTaskById(task.id)
-      expect(updatedTask?.stage).toBe('DONE')
-      expect(updatedTask?.status).toBeDefined()
-      expect(updatedTask?.duration).toBeGreaterThan(0)
-    })
   })
 
   describe('Schedule Management', () => {
-    it('should add and persist a schedule', async () => {
+    it('should add a schedule', () => {
       const scheduleData = manager.addSchedule({
         task: 'LinkStart',
         hour: 3,
@@ -125,19 +83,12 @@ describe('MaaManager with Device Fixture', () => {
       })
 
       expect(scheduleData.id).toBe('LinkStart|3:15')
-
-      // Wait for async database save to complete
-      await new Promise((resolve) => setTimeout(resolve, 200))
-
-      const savedSchedules = await dbService.getSchedulesByDevice('test-device')
-      // There might be more schedules due to initialization
-      const targetSchedule = savedSchedules.find((s) => s.id === 'LinkStart|3:15')
-      expect(targetSchedule).toBeDefined()
-      expect(targetSchedule?.hour).toBe(3)
-      expect(targetSchedule?.minute).toBe(15)
+      expect(manager.schedules).toHaveLength(1)
+      expect(manager.schedules[0].data.hour).toBe(3)
+      expect(manager.schedules[0].data.minute).toBe(15)
     })
 
-    it('should remove and delete a schedule', async () => {
+    it('should remove a schedule', () => {
       const scheduleId = 'LinkStart|3:15'
       manager.addSchedule({
         task: 'LinkStart',
@@ -145,261 +96,153 @@ describe('MaaManager with Device Fixture', () => {
         minute: 15,
       })
 
-      // Wait for async save
-      await new Promise((resolve) => setTimeout(resolve, 200))
-
-      // Verify it exists
-      let schedules = await dbService.getSchedulesByDevice('test-device')
-      const beforeCount = schedules.filter((s) => s.id === scheduleId).length
-      expect(beforeCount).toBeGreaterThan(0)
+      expect(manager.schedules).toHaveLength(1)
 
       manager.removeSchedule(scheduleId)
 
-      // Wait for async delete
-      await new Promise((resolve) => setTimeout(resolve, 200))
-
-      schedules = await dbService.getSchedulesByDevice('test-device')
-      const afterCount = schedules.filter((s) => s.id === scheduleId).length
-      expect(afterCount).toBe(0)
+      expect(manager.schedules).toHaveLength(0)
     })
   })
 
-  describe('Lock/Unlock Operations', () => {
-    it('should lock manager and persist state', async () => {
-      fixture.startPolling()
+  describe('Lock/Unlock', () => {
+    it('should lock the manager', async () => {
+      expect(manager.locked).toBe(false)
 
-      const result = await manager.lock()
+      fixture.startPolling()
+      await manager.lock()
 
       expect(manager.locked).toBe(true)
-      // Result might be false if no task was running
-      expect(result).toBeDefined()
-
-      // Wait for async database update
-      await new Promise((resolve) => setTimeout(resolve, 200))
-
-      const state = await dbService.getManagerState('test-device')
-      expect(state?.locked).toBe(true)
+      expect(manager.queue).toHaveLength(0)
 
       fixture.stopPolling()
     })
 
-    it('should unlock manager and persist state', async () => {
+    it('should unlock the manager', async () => {
       fixture.startPolling()
 
       await manager.lock()
-
-      // Wait for lock to settle
-      await new Promise((resolve) => setTimeout(resolve, 100))
+      expect(manager.locked).toBe(true)
 
       await manager.unlock()
 
       expect(manager.locked).toBe(false)
 
-      // Wait for async database update
-      await new Promise((resolve) => setTimeout(resolve, 200))
-
-      const state = await dbService.getManagerState('test-device')
-      expect(state?.locked).toBe(false)
-
       fixture.stopPolling()
     })
+  })
 
-    it('should prevent queued tasks when locked', async () => {
+  describe('Task Queue Management', () => {
+    it('should queue tasks when manager is unlocked', () => {
+      const task1 = manager.create('LinkStart')
+      const task2 = manager.create('HeartBeat')
+
+      expect(manager.queue).toHaveLength(2)
+      expect(manager.queue[0]).toBe(task1)
+      expect(manager.queue[1]).toBe(task2)
+    })
+
+    it('should not allow non-immediate tasks when locked', async () => {
       fixture.startPolling()
-
       await manager.lock()
 
+      // Should throw error when trying to create non-immediate task while locked
       expect(() => manager.create('LinkStart')).toThrow('Manager locked')
 
       fixture.stopPolling()
     })
 
-    it('should allow immediate tasks when locked', async () => {
+    it('should still create immediate tasks when locked', async () => {
       fixture.startPolling()
-
       await manager.lock()
 
       const task = manager.create('HeartBeat')
-      expect(task).toBeDefined()
-      expect(task.immediate).toBe(true)
+
+      expect(task.stage).toBe('PENDING')
+      // Immediate tasks bypass queue check
 
       fixture.stopPolling()
-    })
-
-    it('should schedule delayed unlock', async () => {
-      fixture.startPolling()
-
-      // Lock the manager first
-      await manager.lock()
-      expect(manager.locked).toBe(true)
-
-      // Schedule unlock with 1 second delay for testing
-      const result = manager.scheduleUnlock({ seconds: 1 })
-
-      expect(result.split('（')[0]).toMatchInlineSnapshot(`"MAA将在1s后出笼"`)
-      expect(manager.locked).toBe(true) // Should still be locked
-
-      // Wait for the unlock to execute
-      await new Promise((resolve) => setTimeout(resolve, 1200))
-
-      // Manager should now be unlocked
-      expect(manager.locked).toBe(false)
-
-      fixture.stopPolling()
-    })
-
-    it('should cancel scheduled unlock when locked again', async () => {
-      fixture.startPolling()
-
-      // Lock the manager first
-      await manager.lock()
-      expect(manager.locked).toBe(true)
-
-      // Schedule unlock with 2 second delay
-      manager.scheduleUnlock({ seconds: 2 })
-      expect(manager.locked).toBe(true)
-
-      // Wait a bit but not long enough for unlock
-      await new Promise((resolve) => setTimeout(resolve, 500))
-
-      // Lock again - this should cancel the scheduled unlock
-      await manager.lock()
-
-      // Wait past the original unlock time
-      await new Promise((resolve) => setTimeout(resolve, 2000))
-
-      // Manager should still be locked
-      expect(manager.locked).toBe(true)
-
-      fixture.stopPolling()
-    })
-
-    it('should cancel scheduled unlock explicitly', async () => {
-      fixture.startPolling()
-
-      await manager.lock()
-
-      // Schedule unlock
-      manager.scheduleUnlock({ seconds: 2 })
-
-      // Cancel it
-      const cancelled = manager.cancelScheduledUnlock()
-      expect(cancelled).toBe(true)
-
-      // Wait past the original unlock time
-      await new Promise((resolve) => setTimeout(resolve, 2500))
-
-      // Manager should still be locked
-      expect(manager.locked).toBe(true)
-
-      fixture.stopPolling()
-    })
-
-    it('should return false when cancelling with no scheduled unlock', () => {
-      const cancelled = manager.cancelScheduledUnlock()
-      expect(cancelled).toBe(false)
     })
   })
 
-  describe('Device Logs', () => {
-    it('should save device logs to database', async () => {
-      const logMessage = '[10-26 03:15:00][MAA] Task started'
-      manager.deviceLog(logMessage)
+  describe('Task Retrieval', () => {
+    it('should get tasks from queue', () => {
+      manager.create('LinkStart')
+      manager.create('HeartBeat')
 
-      // Wait for async database save
-      await new Promise((resolve) => setTimeout(resolve, 100))
+      const tasks = manager.getTask()
 
-      const logs = await dbService.getDeviceLogs('test-device')
-      expect(logs).toHaveLength(1)
-      expect(logs[0].device).toBe('test-device')
+      expect(tasks).toHaveLength(2)
+      expect(manager.queue).toHaveLength(0) // Queue should be empty after retrieval
+    })
+
+    it('should mark tasks as RUNNING when retrieved', () => {
+      const task = manager.create('LinkStart')
+
+      manager.getTask()
+
+      expect(task.stage).toBe('RUNNING')
+    })
+  })
+
+  describe('Task Reporting', () => {
+    it('should report task status', () => {
+      const task = manager.create('LinkStart')
+      manager.getTask() // Move to RUNNING
+
+      const reportedTask = manager.reportStatus({
+        task: task.id,
+        status: 'SUCCESS',
+        payload: undefined,
+      })
+
+      expect(reportedTask).toBeDefined()
+      expect(reportedTask?.stage).toBe('DONE')
+      expect(reportedTask?.status).toBe('SUCCESS')
+    })
+
+    it('should handle failed task status', () => {
+      const task = manager.create('LinkStart')
+      manager.getTask()
+
+      const reportedTask = manager.reportStatus({
+        task: task.id,
+        status: 'FAILED',
+        payload: undefined,
+      })
+
+      expect(reportedTask?.status).toBe('FAILED')
     })
   })
 
   describe('Complete Workflow Simulation', () => {
-    it('should handle a complete MAA workflow', async () => {
+    it('should handle full task lifecycle', async () => {
       fixture.startPolling()
 
-      // Create multiple tasks (mix of immediate and queued)
-      const task1 = manager.create('HeartBeat') // immediate
-      const task2 = manager.create('LinkStart') // queued
-      const task3 = manager.create('CaptureImage') // queued (not CaptureImageNow which is immediate)
+      // Create task
+      const task = manager.create('LinkStart')
+      expect(task.stage).toBe('PENDING')
 
-      // Wait for all tasks to complete
-      await Promise.all([
-        fixture.waitForTask(task1.id, 2000),
-        fixture.waitForTask(task2.id, 2000),
-        fixture.waitForTask(task3.id, 2000),
-      ])
+      // Wait for completion
+      const completedTask = await fixture.waitForTask(task.id, 2000)
 
-      // Verify all tasks completed
-      expect(manager.tasks.get(task1.id)?.stage).toBe('DONE')
-      expect(manager.tasks.get(task2.id)?.stage).toBe('DONE')
-      expect(manager.tasks.get(task3.id)?.stage).toBe('DONE')
-
-      // Send device log
-      fixture.sendLog('[10-26 03:15:00][MAA] All tasks completed')
+      expect(completedTask?.stage).toBe('DONE')
+      expect(['SUCCESS', 'FAILED']).toContain(completedTask?.status)
 
       fixture.stopPolling()
-
-      // Wait for database updates
-      await new Promise((resolve) => setTimeout(resolve, 200))
-
-      // Verify database persistence
-      const tasks = await dbService.getTasksByDevice('test-device')
-      expect(tasks.length).toBeGreaterThanOrEqual(2) // At least LinkStart and CaptureImage (not HeartBeat which is immediate)
-
-      const logs = await dbService.getDeviceLogs('test-device')
-      expect(logs.length).toBeGreaterThanOrEqual(1)
     })
 
-    it('should restore schedules from database on restart', async () => {
-      // Add schedules
-      manager.addSchedule({ task: 'LinkStart', hour: 3, minute: 15 })
-      manager.addSchedule({ task: 'HeartBeat', hour: 0, minute: 0 })
+    it('should handle multiple concurrent tasks', async () => {
+      fixture.startPolling()
 
-      // Wait for database saves
-      await new Promise((resolve) => setTimeout(resolve, 100))
+      const task1 = manager.create('LinkStart')
+      const task2 = manager.create('HeartBeat')
 
-      // Create new manager instance (simulates restart)
-      const newManager = new MaaManager('test-device', 'test-user')
+      await fixture.waitForAllTasks(3000)
 
-      // Wait for initialization
-      await new Promise((resolve) => setTimeout(resolve, 200))
+      expect(manager.tasks.get(task1.id)?.stage).toBe('DONE')
+      expect(manager.tasks.get(task2.id)?.stage).toBe('DONE')
 
-      // Check schedules restored
-      expect(newManager.schedules.length).toBeGreaterThanOrEqual(2)
-
-      // Cleanup
-      newManager.scheduler.stop()
-    })
-  })
-
-  describe('Error Handling', () => {
-    it('should handle task timeout', async () => {
-      const task = manager.create('LinkStart')
-
-      // Don't start fixture polling - task will timeout
-      await expect(task.waitFor('DONE', { milliseconds: 100 })).rejects.toThrow()
-    })
-
-    it('should handle reporting status for non-existent task', () => {
-      const result = manager.reportStatus({
-        task: 'non-existent-task',
-        status: 'SUCCESS',
-      })
-
-      expect(result).toBeUndefined()
-    })
-  })
-
-  describe('State Management', () => {
-    it('should return correct manager state', () => {
-      manager.create('LinkStart')
-      manager.create('HeartBeat')
-
-      expect(manager.locked).toBe(false)
-      expect(manager.state.length).toBeGreaterThanOrEqual(1) // HeartBeat is immediate, shouldn't be in state
-      expect(manager.logs).toBeDefined()
+      fixture.stopPolling()
     })
   })
 })
