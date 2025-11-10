@@ -3,8 +3,8 @@ import { createORPCClient } from '@orpc/client'
 import { RPCLink } from '@orpc/client/fetch'
 import { createRouterUtils } from '@orpc/tanstack-query'
 
-// Import the router VALUE (not just type) for client creation
-import { router } from '@maam/server'
+// Import the router type from server
+import type { router } from '@maam/server'
 
 const url = '/rpc'
 
@@ -82,9 +82,11 @@ const link = new RPCLink<ClientContext>({
 })
 
 /**
- * Create oRPC client from router type
+ * Create oRPC client with proper typing from router
+ * We cast to any intermediate to work around circular type inference
  */
-export const orpcClient = createORPCClient<typeof router, ClientContext>(link)
+const _client = createORPCClient(link)
+export const orpcClient = _client as any as typeof router & { __context: ClientContext }
 
 /**
  * Create Tanstack Query utilities
