@@ -8,7 +8,7 @@ import { AuthModal } from './components/AuthModal'
 import { ThemeProvider } from './components/ThemeProvider'
 import { Toaster } from './components/ui/sonner'
 import Dashboard from './Dashboard'
-import { queryClient } from './lib/trpc'
+import { queryClient } from './lib/orpc'
 
 import './style.css'
 

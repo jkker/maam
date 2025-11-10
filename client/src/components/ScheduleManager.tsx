@@ -19,7 +19,8 @@ import 'temporal-polyfill/global'
 import { useTheme } from '@/hooks/useTheme'
 import { cn, formatTaskType, formatTime } from '@/utils'
 
-import { queryClient, trpc } from '../lib/trpc'
+import { queryClient } from '../lib/orpc'
+import { useRPC } from '../lib/use-rpc'
 import { Button } from './ui/button'
 import { Card, CardHeader, CardTitle } from './ui/card'
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from './ui/dialog'
@@ -27,8 +28,6 @@ import { Input } from './ui/input'
 import { Label } from './ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select'
 import { Spinner } from './ui/spinner'
-
-const queryKey = trpc.schedule.get.queryKey()
 
 const browserTz = Temporal.Now.timeZoneId()
 
@@ -44,10 +43,15 @@ export const ScheduleManager = ({
   const [datetimeToAdd, setDateTimeToAdd] = useState<Temporal.ZonedDateTime>()
   const [scheduleIdToEdit, setScheduleIdEdit] = useState<string>()
 
-  const { data: schedules = [] } = useQuery(trpc.schedule.get.queryOptions())
+  const { orpc, isAuthenticated } = useRPC()
+  const { data: schedules = [] } = useQuery(
+    orpc.schedule.get.queryOptions({ input: undefined, enabled: isAuthenticated }),
+  )
   const { data: officialEvents = [] } = useQuery(
-    trpc.eventCalendar.queryOptions(undefined, {
+    orpc.eventCalendar.queryOptions({
+      input: undefined,
       refetchInterval: 1000 * 60 * 60, // 60 minutes
+      enabled: true, // This doesn't require auth
     }),
   )
 
@@ -231,6 +235,7 @@ function AddScheduleDialog({
   onClose: () => void
   initialDateTime: Temporal.ZonedDateTime | undefined
 }) {
+  const { orpc } = useRPC()
   const [task, setTask] = useState<TaskType>('LinkStart')
   const [time, setTime] = useState(() => {
     if (initialDateTime) {
@@ -242,9 +247,9 @@ function AddScheduleDialog({
   })
 
   const addMutation = useMutation(
-    trpc.schedule.add.mutationOptions({
+    orpc.schedule.add.mutationOptions({
       onSuccess: () => {
-        void queryClient.invalidateQueries({ queryKey })
+        void queryClient.invalidateQueries({ queryKey: orpc.schedule.get.queryKey() })
         onClose()
       },
     }),
@@ -311,10 +316,11 @@ function EditScheduleDialog({
   schedule: ScheduleData
   onClose: () => void
 }) {
+  const { orpc } = useRPC()
   const removeMutation = useMutation(
-    trpc.schedule.remove.mutationOptions({
+    orpc.schedule.remove.mutationOptions({
       onSuccess: () => {
-        void queryClient.invalidateQueries({ queryKey })
+        void queryClient.invalidateQueries({ queryKey: orpc.schedule.get.queryKey() })
         onClose()
       },
     }),

@@ -3,7 +3,7 @@ import { useState } from 'react'
 import { toast } from 'sonner'
 
 import { useAuthStore } from '@/lib/auth-store'
-import { trpc } from '@/lib/trpc'
+import { orpc } from '@/lib/orpc'
 
 import { Button } from './ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from './ui/dialog'
@@ -19,9 +19,9 @@ export function AuthModal() {
   const { isAuthenticated, login } = useAuthStore()
 
   const loginMutation = useMutation(
-    trpc.auth.login.mutationOptions({
+    orpc.auth.login.mutationOptions({
       onSuccess: (data) => {
-        login(data.userId, data.deviceId)
+        login(data.user, data.device)
         toast.success('Authentication successful')
       },
       onError: (error) => {
