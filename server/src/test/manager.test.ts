@@ -4,8 +4,8 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 
 import { MaaManager } from '../MaaManager'
 import { MaaDeviceFixture, createTestManager } from './fixture'
-import { initDatabase, closeDatabase } from '../lib/db'
-import { dbService } from '../lib/db/service'
+import { closeDatabase, runMigrations } from '../lib/db'
+import * as dbService from '../lib/db/service'
 
 describe('MaaManager with Device Fixture', () => {
   const testDbPath = `/tmp/test-maam-manager-${Date.now()}.db`
@@ -25,8 +25,8 @@ describe('MaaManager with Device Fixture', () => {
       // Ignore errors
     }
 
-    // Initialize database
-    initDatabase()
+    // Run migrations
+    runMigrations()
 
     // Create test manager and fixture
     const testSetup = createTestManager('test-device', 'test-user')

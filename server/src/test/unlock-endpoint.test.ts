@@ -3,7 +3,7 @@ import fs from 'node:fs'
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 
 import { MaaDeviceFixture } from './fixture'
-import { initDatabase, closeDatabase } from '../lib/db'
+import { runMigrations, closeDatabase } from '../lib/db'
 import { managerService } from '../lib/managers'
 
 // Test credentials
@@ -26,11 +26,11 @@ function cleanupTestDatabase(dbPath: string) {
 async function setupTestEnvironment(dbPath: string): Promise<MaaDeviceFixture> {
   process.env.DATABASE_PATH = dbPath
   cleanupTestDatabase(dbPath)
-  initDatabase()
-  
+  runMigrations()
+
   // Get or create manager for test device
   const manager = await managerService.getManager(TEST_DEVICE, TEST_USER)
-  
+
   return new MaaDeviceFixture(manager)
 }
 

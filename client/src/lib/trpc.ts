@@ -9,9 +9,9 @@ const url = '/trpc'
 export const queryClient = new QueryClient()
 
 /**
- * Get auth headers from localStorage
+ * Get auth query params from localStorage
  */
-function getAuthHeaders() {
+function getAuthParams(): Record<string, string> {
   try {
     const authStorage = localStorage.getItem('maam-auth-storage')
     if (!authStorage) return {}
@@ -21,14 +21,42 @@ function getAuthHeaders() {
 
     if (state?.userId && state?.deviceId) {
       return {
-        'x-user-id': state.userId,
-        'x-device-id': state.deviceId,
+        user: state.userId,
+        device: state.deviceId,
       }
     }
   } catch (error) {
-    console.error('Failed to get auth headers:', error)
+    console.error('Failed to get auth params:', error)
   }
   return {}
+}
+
+/**
+ * Custom fetch that adds auth query params to all requests
+ */
+function fetchWithAuth(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  const params = new URLSearchParams(getAuthParams())
+  const paramString = params.toString()
+
+  let finalUrl: string
+  if (typeof input === 'string') {
+    finalUrl = paramString ? `${input}${input.includes('?') ? '&' : '?'}${paramString}` : input
+  } else if (input instanceof URL) {
+    const url = new URL(input)
+    Object.entries(getAuthParams()).forEach(([key, value]) => {
+      url.searchParams.set(key, value)
+    })
+    finalUrl = url.toString()
+  } else {
+    // Request object
+    const url = new URL(input.url)
+    Object.entries(getAuthParams()).forEach(([key, value]) => {
+      url.searchParams.set(key, value)
+    })
+    finalUrl = url.toString()
+  }
+
+  return fetch(finalUrl, init)
 }
 
 /**
@@ -40,11 +68,21 @@ export const trpcClient = createTRPCClient<TRPCRouter>({
       condition: (op) => op.type === 'subscription',
       true: httpSubscriptionLink({
         url,
-        connectionParams: () => getAuthHeaders(),
+        EventSource: class extends EventSource {
+          constructor(url: string | URL, eventSourceInitDict?: EventSourceInit) {
+            // Add auth params to SSE URL
+            const params = new URLSearchParams(getAuthParams())
+            const paramString = params.toString()
+            const finalUrl = paramString
+              ? `${url}${url.toString().includes('?') ? '&' : '?'}${paramString}`
+              : url
+            super(finalUrl, eventSourceInitDict)
+          }
+        },
       }),
       false: httpBatchLink({
         url,
-        headers: () => getAuthHeaders(),
+        fetch: fetchWithAuth,
       }),
     }),
   ],

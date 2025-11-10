@@ -2,46 +2,34 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 
 interface AuthState {
-  userId: string | null
-  deviceId: string | null
-  deviceName: string | null
+  user: string | undefined
+  device: string | undefined
   isAuthenticated: boolean
-  
+
   // Actions
-  login: (userId: string, deviceId: string, deviceName?: string) => void
+  login: (user: string, device: string) => void
   logout: () => void
-  updateDeviceName: (name: string) => void
 }
 
 export const useAuthStore = create<AuthState>()(
   persist(
     (set) => ({
-      userId: null,
-      deviceId: null,
-      deviceName: null,
+      user: undefined,
+      device: undefined,
       isAuthenticated: false,
-
-      login: (userId: string, deviceId: string, deviceName?: string) =>
+      login: (user: string, device: string) =>
         set({
-          userId,
-          deviceId,
-          deviceName: deviceName || null,
+          user,
+          device,
           isAuthenticated: true,
         }),
 
       logout: () =>
         set({
-          userId: null,
-          deviceId: null,
-          deviceName: null,
+          user: undefined,
+          device: undefined,
           isAuthenticated: false,
         }),
-
-      updateDeviceName: (name: string) =>
-        set((state) => ({
-          ...state,
-          deviceName: name,
-        })),
     }),
     {
       name: 'maam-auth-storage',

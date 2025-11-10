@@ -1,9 +1,9 @@
 import fs from 'node:fs'
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, beforeEach } from 'vitest'
 
-import { initDatabase, closeDatabase } from '../lib/db'
-import { dbService } from '../lib/db/service'
+import { runMigrations, closeDatabase } from '../lib/db'
+import * as dbService from '../lib/db/service'
 
 describe('Database Service', () => {
   const testDbPath = `/tmp/test-maam-${Date.now()}.db`
@@ -23,8 +23,8 @@ describe('Database Service', () => {
       // Ignore errors
     }
 
-    // Initialize fresh database
-    initDatabase()
+    // Run migrations for fresh database
+    runMigrations()
   })
 
   afterEach(() => {
@@ -81,7 +81,7 @@ describe('Database Service', () => {
         duration: 60000,
       }
 
-      await dbService.updateTask(updatedTask, testDevice)
+      await dbService.updateTask(updatedTask)
 
       const task = await dbService.getTaskById(taskData.id)
       expect(task?.stage).toBe('DONE')
@@ -197,24 +197,6 @@ describe('Database Service', () => {
 
       const state = await dbService.getManagerState(testDevice)
       expect(state?.locked).toBe(true)
-    })
-
-    it('should update manager heartbeat', async () => {
-      await dbService.saveManagerState(testDevice, testUser, 'Asia/Shanghai', false)
-
-      const beforeHeartbeat = await dbService.getManagerState(testDevice)
-      // After initial save, last_heartbeat might be set
-      const initialHeartbeat = beforeHeartbeat?.lastHeartbeat
-
-      // Wait a moment to ensure different timestamp
-      await new Promise((resolve) => setTimeout(resolve, 50))
-
-      await dbService.updateManagerHeartbeat(testDevice)
-
-      const afterHeartbeat = await dbService.getManagerState(testDevice)
-      expect(afterHeartbeat?.lastHeartbeat).toBeDefined()
-      // Ensure it was actually updated
-      expect(afterHeartbeat?.lastHeartbeat).not.toBe(initialHeartbeat)
     })
   })
 

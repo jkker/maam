@@ -5,8 +5,8 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { MaaManager } from '../MaaManager'
 import { MaaDeviceFixture, createTestManager } from './fixture'
 import { app } from '../index'
-import { initDatabase, closeDatabase } from '../lib/db'
-import { dbService } from '../lib/db/service'
+import { runMigrations, closeDatabase } from '../lib/db'
+import * as dbService from '../lib/db/service'
 
 describe('MJPEG Screenshot Stream', () => {
   const testDbPath = `/tmp/test-maam-mjpeg-${Date.now()}.db`
@@ -26,8 +26,8 @@ describe('MJPEG Screenshot Stream', () => {
       // Ignore errors
     }
 
-    // Initialize database
-    initDatabase()
+    // Run migrations
+    runMigrations()
 
     // Create test manager and fixture
     const testSetup = createTestManager('test-device', 'test-user')
@@ -62,12 +62,7 @@ describe('MJPEG Screenshot Stream', () => {
   })
 
   it('should return proper MJPEG headers', async () => {
-    const res = await app.request('/maa/screenshot.mjpeg', {
-      headers: {
-        'x-user-id': 'test-user',
-        'x-device-id': 'test-device',
-      },
-    })
+    const res = await app.request('/maa/screenshot.mjpeg?user=test-user&device=test-device')
 
     expect(res.status).toBe(200)
     expect(res.headers.get('Content-Type')).toBe('multipart/x-mixed-replace;boundary=--bound')

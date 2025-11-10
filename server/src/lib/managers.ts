@@ -1,5 +1,5 @@
 import { MaaManager } from '../MaaManager'
-import { dbService } from './db/service'
+import * as dbService from './db/service'
 import { logger } from './logger'
 
 /**

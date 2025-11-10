@@ -12,15 +12,15 @@ import { logger as loggerMiddleware } from 'hono/logger'
 import { z } from 'zod'
 
 import { TASK_TYPE, MJPEG_BOUNDARY } from './const'
-import { initDatabase } from './lib/db'
-import { dbService } from './lib/db/service'
+import { runMigrations } from './lib/db'
+import * as dbService from './lib/db/service'
 import { DEBUG, logger } from './lib/logger'
 import { managerService } from './lib/managers'
 import { fetchUpcomingEvents } from './lib/prts.wiki'
 import { reportSchema, scheduleSchema, deviceSchema } from './lib/schema'
 
-// Initialize database
-initDatabase()
+// Run database migrations
+runMigrations()
 
 interface VariablesContext {
   manager: MaaManager
@@ -85,20 +85,20 @@ export const router = t.router({
     login: t.procedure
       .input(
         z.object({
-          userId: z.string().min(1),
-          deviceId: z.string().min(10),
-          deviceName: z.string().optional(),
+          user: z.string().min(1),
+          device: z.string().min(10),
+          label: z.string().optional(),
         }),
       )
       .mutation(async ({ input }) => {
         try {
-          await dbService.getUserOrCreate(input.userId)
-          await dbService.getDeviceOrCreate(input.deviceId, input.userId, input.deviceName)
-          
-          // Pre-warm the manager
-          await managerService.getManager(input.deviceId, input.userId)
+          await dbService.getUserOrCreate(input.user)
+          await dbService.getDeviceOrCreate(input.device, input.user, input.label)
 
-          return { success: true, userId: input.userId, deviceId: input.deviceId }
+          // Pre-warm the manager
+          await managerService.getManager(input.device, input.user)
+
+          return { success: true, userId: input.user, deviceId: input.device }
         } catch (error) {
           logger.error('Login failed:', error)
           throw new TRPCError({
@@ -112,7 +112,7 @@ export const router = t.router({
   // Manager control procedures
   start: protectedProcedure.mutation(async ({ ctx: { manager } }) => manager.start()),
   stop: protectedProcedure.mutation(async ({ ctx: { manager } }) => manager.stop()),
-  
+
   // Lock control procedures
   locked: protectedProcedure.query(({ ctx: { manager } }) => manager.locked),
   toggleLock: protectedProcedure
@@ -183,9 +183,9 @@ export const app = new Hono<{ Variables: VariablesContext }>()
     trpcServer({
       router,
       createContext: (opts, c) => {
-        // Extract auth from headers using Hono's context
-        const userId = c.req.header('x-user-id') || undefined
-        const deviceId = c.req.header('x-device-id') || undefined
+        // Extract auth from query params using Hono's context
+        const userId = c.req.query('user') || undefined
+        const deviceId = c.req.query('device') || undefined
         return { userId, deviceId }
       },
     }),
@@ -193,29 +193,25 @@ export const app = new Hono<{ Variables: VariablesContext }>()
 
   // MAA remote control protocol endpoints
   // These require device+user authentication
-  .post(
-    '/maa/getTask',
-    zValidator('json', deviceSchema),
-    async (c) => {
-      try {
-        const { device, user } = c.req.valid('json')
+  .post('/maa/getTask', zValidator('json', deviceSchema), async (c) => {
+    try {
+      const { device, user } = c.req.valid('json')
 
-        // Validate and get manager
-        const isValid = await dbService.validateDeviceOwnership(device, user)
-        if (!isValid) {
-          return c.json({ error: 'Unauthorized' }, 401)
-        }
-
-        const manager = await managerService.getManager(device, user)
-        const tasks = manager.getTask()
-        logger.debug('Providing tasks to MAA client:', tasks)
-        return c.json({ tasks })
-      } catch (error) {
-        logger.error('Failed to get tasks:', error)
-        return c.json({ tasks: [] }, 500)
+      // Validate and get manager
+      const isValid = await dbService.validateDeviceOwnership(device, user)
+      if (!isValid) {
+        return c.json({ error: 'Unauthorized' }, 401)
       }
-    },
-  )
+
+      const manager = await managerService.getManager(device, user)
+      const tasks = manager.getTask()
+      logger.debug('Providing tasks to MAA client:', tasks)
+      return c.json({ tasks })
+    } catch (error) {
+      logger.error('Failed to get tasks:', error)
+      return c.json({ tasks: [] }, 500)
+    }
+  })
 
   .post('/maa/reportStatus', zValidator('json', reportSchema), async (c) => {
     try {
@@ -259,10 +255,10 @@ export const app = new Hono<{ Variables: VariablesContext }>()
     }
   })
 
-  // Screenshot endpoints - require auth headers
+  // Screenshot endpoints - require auth query params
   .get('/maa/screenshot.jpg', async (c) => {
-    const deviceId = c.req.header('x-device-id')
-    const userId = c.req.header('x-user-id')
+    const deviceId = c.req.query('device')
+    const userId = c.req.query('user')
 
     if (!deviceId || !userId) {
       return c.text('Unauthorized', 401)
@@ -282,8 +278,8 @@ export const app = new Hono<{ Variables: VariablesContext }>()
   })
 
   .get('/maa/screenshot.mjpeg', async (c) => {
-    const deviceId = c.req.header('x-device-id')
-    const userId = c.req.header('x-user-id')
+    const deviceId = c.req.query('device')
+    const userId = c.req.query('user')
 
     if (!deviceId || !userId) {
       return c.text('Unauthorized', 401)
@@ -302,10 +298,10 @@ export const app = new Hono<{ Variables: VariablesContext }>()
     })
   })
 
-  // Management endpoints - require auth headers
+  // Management endpoints - require auth query params
   .get('/maa/lock', async (c) => {
-    const deviceId = c.req.header('x-device-id')
-    const userId = c.req.header('x-user-id')
+    const deviceId = c.req.query('device')
+    const userId = c.req.query('user')
 
     if (!deviceId || !userId) {
       return c.text('Unauthorized', 401)
@@ -324,8 +320,8 @@ export const app = new Hono<{ Variables: VariablesContext }>()
     '/maa/unlock',
     zValidator('query', z.object({ delay: z.number().optional().default(10) })),
     async (c) => {
-      const deviceId = c.req.header('x-device-id')
-      const userId = c.req.header('x-user-id')
+      const deviceId = c.req.query('device')
+      const userId = c.req.query('user')
 
       if (!deviceId || !userId) {
         return c.text('Unauthorized', 401)

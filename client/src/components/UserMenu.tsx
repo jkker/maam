@@ -15,7 +15,7 @@ import {
 } from './ui/dropdown-menu'
 
 export function UserMenu() {
-  const { userId, deviceId, deviceName, logout } = useAuthStore()
+  const { user, device, logout } = useAuthStore()
 
   const handleLogout = () => {
     logout()
@@ -24,7 +24,7 @@ export function UserMenu() {
     window.location.reload()
   }
 
-  if (!userId || !deviceId) return null
+  if (!user || !device) return null
 
   return (
     <DropdownMenu>
@@ -37,12 +37,9 @@ export function UserMenu() {
         <DropdownMenuLabel>Account</DropdownMenuLabel>
         <DropdownMenuSeparator />
         <div className="px-2 py-1.5 text-sm">
-          <div className="font-medium truncate">{userId}</div>
-          {deviceName && (
-            <div className="text-muted-foreground text-xs truncate mt-0.5">{deviceName}</div>
-          )}
+          <div className="font-medium truncate">{user}</div>
           <div className="text-muted-foreground text-xs font-mono truncate mt-1">
-            {deviceId.slice(0, 16)}...
+            {device.slice(0, 16)}...
           </div>
         </div>
         <DropdownMenuSeparator />

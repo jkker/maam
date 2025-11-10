@@ -11,7 +11,6 @@ import { Field, FieldLabel } from './ui/field'
 import { Input } from './ui/input'
 import { Spinner } from './ui/spinner'
 
-
 export function AuthModal() {
   const [userId, setUserId] = useState('')
   const [deviceId, setDeviceId] = useState('')
@@ -22,7 +21,7 @@ export function AuthModal() {
   const loginMutation = useMutation(
     trpc.auth.login.mutationOptions({
       onSuccess: (data) => {
-        login(data.userId, data.deviceId, deviceName || undefined)
+        login(data.userId, data.deviceId)
         toast.success('Authentication successful')
       },
       onError: (error) => {
@@ -45,9 +44,9 @@ export function AuthModal() {
     }
 
     loginMutation.mutate({
-      userId: userId.trim(),
-      deviceId: deviceId.trim(),
-      deviceName: deviceName.trim() || undefined,
+      user: userId.trim(),
+      device: deviceId.trim(),
+      label: deviceName.trim() || undefined,
     })
   }
 
