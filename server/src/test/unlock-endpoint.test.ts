@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 
-import { MaaDeviceFixture } from './fixture'
+import { MaaDeviceFixture } from '../fixture/device-fixture'
 import { managerService } from '../lib/managers'
 
 // Mock database service

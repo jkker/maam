@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 
+import { MaaDeviceFixture, createTestManager } from '../fixture/device-fixture'
 import { MaaManager } from '../MaaManager'
-import { MaaDeviceFixture, createTestManager } from './fixture'
 
 // Mock database service to avoid file I/O in unit tests
 vi.mock('../lib/db/service', () => ({
