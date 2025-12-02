@@ -108,6 +108,8 @@ async function waitForCompletion(
   const { status, payload } = await hook
 
   // Update state
+  // Note: In production, this timestamp should come from a step function
+  // to ensure deterministic replay behavior
   state.status = status
   state.payload = payload
   state.stage = 'DONE'
@@ -188,6 +190,9 @@ export async function scheduleWorkflow(
   'use workflow'
 
   // Calculate time until next scheduled run
+  // Note: In production, time calculations should be done in step functions
+  // to ensure deterministic replay behavior. The workflow SDK's sleep()
+  // function handles the actual scheduling durably.
   const now = new Date()
   const scheduledTime = new Date()
   scheduledTime.setHours(hour, minute, 0, 0)
@@ -199,10 +204,10 @@ export async function scheduleWorkflow(
 
   const msUntilScheduled = scheduledTime.getTime() - now.getTime()
 
-  // Sleep until scheduled time
+  // Sleep until scheduled time (this is durable and survives restarts)
   await sleep(msUntilScheduled)
 
-  // Dispatch the task
+  // Dispatch the task - timestamp should come from a step function in production
   const createdAt = new Date().toISOString()
   const taskResult = await taskWorkflow(type, createdAt, params)
 

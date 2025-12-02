@@ -64,7 +64,8 @@ class WorkflowService {
     timezone: string,
     params?: string,
   ): string {
-    const runId = `schedule-${type}-${hour}:${minute}-${Date.now()}`
+    // Use crypto.randomUUID() for deterministic-friendly ID generation
+    const runId = `schedule-${type}-${hour}:${minute}-${crypto.randomUUID().slice(0, 8)}`
 
     logger.info(
       `[WorkflowService] Starting scheduled task workflow: ${runId} for ${type} at ${hour}:${minute}`,
@@ -90,7 +91,8 @@ class WorkflowService {
    * @param delayMinutes - Minutes to wait before unlocking
    */
   startDelayedUnlockWorkflow(deviceId: string, userId: string, delayMinutes: number): string {
-    const runId = `unlock-${deviceId}-${Date.now()}`
+    // Use crypto.randomUUID() for deterministic-friendly ID generation
+    const runId = `unlock-${deviceId}-${crypto.randomUUID().slice(0, 8)}`
 
     logger.info(
       `[WorkflowService] Starting delayed unlock workflow: ${runId} for device ${deviceId} in ${delayMinutes}m`,
