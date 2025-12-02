@@ -508,13 +508,10 @@ export class MaaManager extends EventEmitter<MaaManagerEventMap> {
     const task = this.tasks.get(id)
     if (!task) return
 
-    task.stage = 'DONE'
-    task.completedAt = this.now
-    if (payload) task.payload = payload
-    if (status) task.status = status
+    // Use the new complete() method which handles both events and workflow hooks
+    task.complete(status ?? 'SUCCESS', payload, this.now)
 
     this.queue = this.queue.filter((t) => t.id !== id)
-    task.emit('DONE', task)
     task.log()
 
     // Persist task completion to database (async, non-blocking)
@@ -530,9 +527,8 @@ export class MaaManager extends EventEmitter<MaaManagerEventMap> {
 
   public getTask() {
     const tasks = this.queue.map((task) => {
-      task.stage = 'RUNNING'
-      task.startedAt = this.now
-      task.emit('RUNNING', task)
+      // Use the new start() method which handles events
+      task.start(this.now)
       task.log()
 
       // Persist task state update to database (async, non-blocking)

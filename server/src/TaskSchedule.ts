@@ -10,12 +10,31 @@ type TaskScheduleOptions = {
   onStateChange?: (schedule: TaskSchedule) => void
 }
 
+/**
+ * TaskSchedule - Cron-based task scheduling with workflow integration
+ *
+ * This class manages scheduled task execution using toad-scheduler for cron jobs.
+ * It integrates with the workflow system by:
+ * - Tracking workflow run IDs for each scheduled execution
+ * - Supporting cooldown periods to prevent rapid re-execution
+ * - Maintaining execution history for audit and debugging
+ *
+ * The workflow integration enables:
+ * - Durable scheduling that survives server restarts (via workflow persistence)
+ * - Correlation between scheduled tasks and their workflow runs
+ * - Better observability of scheduled task execution
+ */
 export class TaskSchedule extends CronJob {
   readonly id: string
   public lastRunTime?: Temporal.ZonedDateTime
   public runCount: number = 0
   public cooldownUntil?: Temporal.ZonedDateTime
   public params?: string
+
+  /**
+   * Last workflow run ID for tracking durable workflow execution
+   */
+  public lastWorkflowRunId?: string
 
   constructor(
     public type: TaskType,
@@ -32,21 +51,25 @@ export class TaskSchedule extends CronJob {
       { cronExpression: `0 ${minute} ${hour} * * *`, timezone },
       new ScheduledTask(`task-${id}`, () => {
         if (this.cooldownUntil) {
-          logger.info(
-            `Skipping scheduled task ${this.id} due to active cooldown until ${this.cooldownUntil.toString()}`,
-          )
+          const now = getNow(this.timezone)
+          if (Temporal.ZonedDateTime.compare(now, this.cooldownUntil) < 0) {
+            logger.info(
+              `Skipping scheduled task ${this.id} due to active cooldown until ${this.cooldownUntil.toString()}`,
+            )
+            return
+          }
+          // Cooldown expired, clear it
           delete this.cooldownUntil
           onStateChange?.(this)
-          return
         }
         this.lastRunTime = getNow(this.timezone)
         this.runCount += 1
-        logger.info(`Executing scheduled task ${this.id} (run #${this.runCount})`)
+        logger.info(`[Workflow] Executing scheduled task ${this.id} (run #${this.runCount})`)
         onStateChange?.(this)
         try {
           handler()
         } catch (error) {
-          logger.error(`Scheduled task ${this.id} failed:`, error)
+          logger.error(`[Workflow] Scheduled task ${this.id} failed:`, error)
         }
       }),
       { preventOverrun: true, id },
@@ -55,6 +78,9 @@ export class TaskSchedule extends CronJob {
     this.params = params
   }
 
+  /**
+   * Get serializable schedule data including workflow tracking info
+   */
   get data() {
     return {
       id: this.id,
@@ -66,7 +92,17 @@ export class TaskSchedule extends CronJob {
       ...(this.lastRunTime && { lastRunTime: this.lastRunTime.toString() }),
       ...(this.runCount && { runCount: this.runCount }),
       ...(this.cooldownUntil && { cooldownUntil: this.cooldownUntil.toString() }),
+      ...(this.lastWorkflowRunId && { lastWorkflowRunId: this.lastWorkflowRunId }),
     }
+  }
+
+  /**
+   * Set workflow run ID for the current execution
+   * This is used to correlate scheduled tasks with their workflow runs
+   */
+  setWorkflowRunId(runId: string) {
+    this.lastWorkflowRunId = runId
+    logger.debug(`[Workflow] Schedule ${this.id} associated with workflow run ${runId}`)
   }
 }
 

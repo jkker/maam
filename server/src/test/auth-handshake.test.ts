@@ -1,6 +1,6 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { RPCHandler } from '@orpc/server/fetch'
 import { RequestHeadersPlugin } from '@orpc/server/plugins'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 
 import { router } from '../index'
 import * as dbService from '../lib/db/service'
@@ -18,6 +18,7 @@ describe('Authentication & Handshake', () => {
     interceptors: [],
   })
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const callRPC = async (path: string, input: any, headers: Record<string, string> = {}) => {
     const request = new Request(`http://localhost:3000/rpc/${path}`, {
       method: 'POST',
@@ -41,19 +42,19 @@ describe('Authentication & Handshake', () => {
     return { status: response.status, data }
   }
 
-  beforeEach(async () => {
+  beforeEach(() => {
     // Clean up any existing test data
     try {
-      await managerService.removeManager(testDevice, testUser)
+      managerService.removeManager(testDevice, testUser)
     } catch {
       // Manager doesn't exist, that's fine
     }
   })
 
-  afterEach(async () => {
+  afterEach(() => {
     // Clean up after each test
     try {
-      await managerService.removeManager(testDevice, testUser)
+      managerService.removeManager(testDevice, testUser)
     } catch {
       // Ignore
     }
@@ -97,8 +98,10 @@ describe('Authentication & Handshake', () => {
       try {
         await callRPC('start', undefined)
         expect.fail('Should have thrown error')
-      } catch (error: any) {
-        expect(error.message).toContain('Missing authentication credentials')
+      } catch (error: unknown) {
+        expect((error as { message: string }).message).toContain(
+          'Missing authentication credentials',
+        )
       }
     })
 
@@ -114,8 +117,10 @@ describe('Authentication & Handshake', () => {
           'x-maam-user': testUser,
         })
         expect.fail('Should have thrown error')
-      } catch (error: any) {
-        expect(error.message).toContain('Missing authentication credentials')
+      } catch (error: unknown) {
+        expect((error as { message: string }).message).toContain(
+          'Missing authentication credentials',
+        )
       }
 
       // Try with only device header
@@ -124,8 +129,10 @@ describe('Authentication & Handshake', () => {
           'x-maam-device': testDevice,
         })
         expect.fail('Should have thrown error')
-      } catch (error: any) {
-        expect(error.message).toContain('Missing authentication credentials')
+      } catch (error: unknown) {
+        expect((error as { message: string }).message).toContain(
+          'Missing authentication credentials',
+        )
       }
     })
   })
@@ -151,11 +158,11 @@ describe('Authentication & Handshake', () => {
           // Simulate device responding immediately
           setTimeout(() => {
             task.stage = 'RUNNING'
-            task.emit('RUNNING', task.data)
+            task.emit('RUNNING', task)
             setTimeout(() => {
               task.stage = 'DONE'
               task.status = 'SUCCESS'
-              task.emit('DONE', task.data)
+              task.emit('DONE', task)
             }, 10)
           }, 10)
         }
@@ -163,14 +170,10 @@ describe('Authentication & Handshake', () => {
       })
 
       // Call protected endpoint - this triggers handshake
-      const result = await callRPC(
-        'auth.heartbeat',
-        undefined,
-        {
-          'x-maam-user': testUser,
-          'x-maam-device': testDevice,
-        },
-      )
+      const result = await callRPC('auth.heartbeat', undefined, {
+        'x-maam-user': testUser,
+        'x-maam-device': testDevice,
+      })
 
       expect(result.status).toBe(200)
       expect(result.data).toMatchObject({
@@ -190,10 +193,10 @@ describe('Authentication & Handshake', () => {
       expect(scheduleHours).toContain(20)
 
       // Verify all default schedules are LinkStart tasks
-      const defaultSchedules = manager.schedules.filter((s) =>
-        [4, 12, 20].includes(s.data.hour) && s.data.minute === 0,
+      const defaultSchedules = manager.schedules.filter(
+        (s) => [4, 12, 20].includes(s.data.hour) && s.data.minute === 0,
       )
-      expect(defaultSchedules.every((s) => s.data.task === 'LinkStart')).toBe(true)
+      expect(defaultSchedules.every((s) => s.data.type === 'LinkStart')).toBe(true)
     })
 
     it('should skip handshake for already validated devices', async () => {
@@ -211,21 +214,15 @@ describe('Authentication & Handshake', () => {
       const createSpy = vi.spyOn(manager, 'create')
 
       // Call protected endpoint
-      const result = await callRPC(
-        'locked',
-        undefined,
-        {
-          'x-maam-user': testUser,
-          'x-maam-device': testDevice,
-        },
-      )
+      const result = await callRPC('locked', undefined, {
+        'x-maam-user': testUser,
+        'x-maam-device': testDevice,
+      })
 
       expect(result.status).toBe(200)
 
       // Verify no HeartBeat task was created (handshake skipped)
-      const heartbeatCalls = createSpy.mock.calls.filter(
-        (call) => call[0] === 'HeartBeat',
-      )
+      const heartbeatCalls = createSpy.mock.calls.filter((call) => call[0] === 'HeartBeat')
       expect(heartbeatCalls.length).toBe(0)
     })
   })
@@ -248,7 +245,7 @@ describe('Authentication & Handshake', () => {
           // Simulate device NOT responding (timeout scenario)
           setTimeout(() => {
             task.stage = 'RUNNING'
-            task.emit('RUNNING', task.data)
+            task.emit('RUNNING', task)
             // Never emit DONE - simulates timeout
           }, 10)
         }
@@ -257,17 +254,13 @@ describe('Authentication & Handshake', () => {
 
       // Call protected endpoint - handshake should fail
       try {
-        await callRPC(
-          'auth.heartbeat',
-          undefined,
-          {
-            'x-maam-user': testUser,
-            'x-maam-device': testDevice,
-          },
-        )
+        await callRPC('auth.heartbeat', undefined, {
+          'x-maam-user': testUser,
+          'x-maam-device': testDevice,
+        })
         expect.fail('Should have thrown error')
-      } catch (error: any) {
-        expect(error.message).toContain('Device handshake failed')
+      } catch (error: unknown) {
+        expect((error as { message: string }).message).toContain('Device handshake failed')
       }
     }, 20000) // Increase timeout for this test
 
@@ -288,7 +281,7 @@ describe('Authentication & Handshake', () => {
         if (type === 'HeartBeat') {
           setTimeout(() => {
             task.stage = 'RUNNING'
-            task.emit('RUNNING', task.data)
+            task.emit('RUNNING', task)
             // Never complete
           }, 10)
         }
@@ -297,14 +290,10 @@ describe('Authentication & Handshake', () => {
 
       // Try to authenticate - should fail
       try {
-        await callRPC(
-          'locked',
-          undefined,
-          {
-            'x-maam-user': testUser,
-            'x-maam-device': testDevice,
-          },
-        )
+        await callRPC('locked', undefined, {
+          'x-maam-user': testUser,
+          'x-maam-device': testDevice,
+        })
         expect.fail('Should have thrown error')
       } catch {
         // Expected to fail
@@ -323,14 +312,10 @@ describe('Authentication & Handshake', () => {
       })
 
       // Try with different casing
-      const result = await callRPC(
-        'locked',
-        undefined,
-        {
-          'X-MAAM-USER': testUser,
-          'X-MAAM-DEVICE': testDevice,
-        },
-      )
+      const result = await callRPC('locked', undefined, {
+        'X-MAAM-USER': testUser,
+        'X-MAAM-DEVICE': testDevice,
+      })
 
       expect(result.status).toBe(200)
     })

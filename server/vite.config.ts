@@ -1,6 +1,7 @@
 import { defineConfig } from 'vite'
 import dts from 'vite-plugin-dts'
 import devServer from '@hono/vite-dev-server'
+import { workflow } from 'workflow/vite'
 
 export default defineConfig(({ mode }) => ({
   build: {
@@ -13,6 +14,7 @@ export default defineConfig(({ mode }) => ({
     emptyOutDir: true,
   },
   plugins: [
+    workflow(),
     dts({
       entryRoot: 'src',
       exclude: ['**/*.test.ts'],
