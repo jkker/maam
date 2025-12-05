@@ -43,7 +43,7 @@ export default defineConfig({
   server: {
     port: 3113,
     proxy: {
-      '/trpc': 'http://localhost:31113',
+      '/rpc': 'http://localhost:31113',
       '/maa': 'http://localhost:31113',
     },
   },

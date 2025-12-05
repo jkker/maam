@@ -7,8 +7,6 @@ import { QueryClient } from '@tanstack/react-query'
 
 import { useAuthStore } from './auth-store'
 
-const url = '/rpc'
-
 export const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
@@ -19,39 +17,27 @@ export const queryClient = new QueryClient({
   },
 })
 
-/**
- * Create oRPC link with auth via HTTP headers (OpenAPI 3.x compliant)
- * Uses x-maam-user and x-maam-device headers for authentication
- */
-const link = new RPCLink({
-  url,
-  /**
-   * Headers callback to inject auth from zustand store
-   * This follows OpenAPI 3.x best practices for custom auth headers
-   */
-  headers: () => {
-    const { user, device } = useAuthStore.getState()
-    
-    // Only add headers if authenticated
-    if (!user || !device) {
-      return {}
-    }
+export const invalidateQueries = queryClient.invalidateQueries.bind(queryClient)
 
-    return {
+/**
+ * Reactive hook for oRPC that updates when auth state changes
+ * Returns the orpc instance which will automatically use current auth from headers callback
+ *
+ * Note: To enable/disable queries based on auth, manually pass enabled option:
+ * useQuery(orpc.someQuery.queryOptions({ input, enabled: isAuthenticated }))
+ */
+export function useRPC() {
+  const { user, device, isAuthenticated } = useAuthStore()
+  const link = new RPCLink({
+    url: new URL('/rpc', window.location.origin),
+    headers: {
       'x-maam-user': user,
       'x-maam-device': device,
-    }
-  },
-})
+    },
+  })
+  const screenshotURL = `/maa/screenshot?user=${encodeURIComponent(user!)}&device=${encodeURIComponent(device!)}`
 
-/**
- * Create oRPC client with proper type inference from router
- */
-export const orpcClient: RouterClient<typeof router> = createORPCClient(link)
-
-/**
- * Create Tanstack Query utilities with proper type inference
- */
-export const orpc = createRouterUtils(orpcClient)
-
-export const invalidateQueries = queryClient.invalidateQueries.bind(queryClient)
+  const orpcClient: RouterClient<typeof router> = createORPCClient(link)
+  const orpc = createRouterUtils(orpcClient)
+  return { orpc, isAuthenticated, screenshotURL }
+}

@@ -22,7 +22,6 @@
     "noUncheckedSideEffectImports": true,
     "skipDefaultLibCheck": true,
 
-    "baseUrl": ".",
     "paths": {
       "@/*": ["./src/*"],
       "@/components/*": ["./src/components/*"],

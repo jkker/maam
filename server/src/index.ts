@@ -59,7 +59,7 @@ const authMiddleware = base.middleware(async ({ context, next }) => {
 
   // Validate device ownership
   const isValid = await dbService.validateDeviceOwnership(device, user)
-  
+
   if (!isValid) {
     // First-time authentication - create user and device
     await dbService.getUserOrCreate(user)
@@ -76,13 +76,13 @@ const authMiddleware = base.middleware(async ({ context, next }) => {
       // First-time authentication - verify device is online with heartbeat
       const heartbeatTask = manager.create('HeartBeat')
       await heartbeatTask.waitFor('RUNNING', { seconds: 5 })
-      
+
       // Wait for device to report back
       await heartbeatTask.waitFor('DONE', { seconds: 10 })
-      
+
       // First successful handshake - create default schedules
       logger.info(`First successful auth for ${user}@${device}, creating default schedules`)
-      
+
       // Create default schedules for LinkStart at 04:00, 12:00, and 20:00
       // Use system timezone (each schedule can specify timezone if needed)
       const defaultHours = [4, 12, 20]
@@ -147,7 +147,7 @@ export const router = {
           })
         }
       }),
-    
+
     /**
      * Test heartbeat to verify device is online
      * This triggers handshake validation
@@ -234,9 +234,7 @@ export const app = new Hono<{ Variables: VariablesContext }>().use(compress())
 
 // Setup oRPC handler with RequestHeadersPlugin for auth via HTTP headers
 const rpcHandler = new RPCHandler(router, {
-  plugins: [
-    new RequestHeadersPlugin(),
-  ],
+  plugins: [new RequestHeadersPlugin()],
   interceptors: [],
 })
 
@@ -420,8 +418,6 @@ else app.use(serveStatic({ root: 'dist/public', index: 'index.html' }))
 
 // Apply logging middleware in debug mode
 if (DEBUG) app.use(loggerMiddleware())
-
-export * from './lib/schema'
 
 // Re-export RouterClient type for client-side usage
 export type { RouterClient } from '@orpc/server'

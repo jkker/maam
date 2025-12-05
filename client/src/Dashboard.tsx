@@ -1,6 +1,7 @@
 import type { ScheduleData, TaskData } from '@maam/server'
 
 import { STAGE_OPTIONS } from '@maam/server/const'
+import { formatDuration, formatTime } from '@maam/server/lib/temporal'
 import { useMutation, useQuery } from '@tanstack/react-query'
 
 import {
@@ -44,6 +45,7 @@ import {
 } from '@/components/ui/input-group'
 
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { cn, formatTaskType } from '@/lib/utils'
 
 import { ScheduleManager } from './components/ScheduleManager'
 import { TaskStatusBadge } from './components/task-status-badge'
@@ -67,10 +69,7 @@ import { Skeleton } from './components/ui/skeleton'
 import { Spinner } from './components/ui/spinner'
 import { UserMenu } from './components/UserMenu'
 import { Footer, Header } from './Layout'
-import { useAuthStore } from './lib/auth-store'
-import { invalidateQueries } from './lib/orpc'
-import { useRPC } from './lib/use-rpc'
-import { cn, formatDuration, formatTaskType, formatTime } from './utils'
+import { invalidateQueries, useRPC } from './lib/orpc'
 
 export default function Dashboard() {
   const { orpc, isAuthenticated } = useRPC()
@@ -340,7 +339,7 @@ function ScreenshotViewer({ className }: { className?: string }) {
   const [imageError, setImageError] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
 
-  const { user, device } = useAuthStore()
+  const { screenshotURL } = useRPC()
 
   return (
     <Card className={cn('aspect-video overflow-hidden flex flex-col py-0 relative', className)}>
@@ -360,7 +359,7 @@ function ScreenshotViewer({ className }: { className?: string }) {
           </Empty>
         ) : (
           <img
-            src={`/maa/screenshot?user=${encodeURIComponent(user!)}&device=${encodeURIComponent(device!)}`}
+            src={screenshotURL}
             alt="Live screenshot"
             className="w-full h-full object-contain"
             onLoad={() => setIsLoading(false)}
@@ -665,11 +664,11 @@ function TaskManager({ className }: { className?: string }) {
             </Empty>
           </div>
         ) : (
-          <ScrollArea className="max-h-[24rem] md:max-h-[28rem] lg:max-h-[32rem]">
+          <ScrollArea className="max-h-96 md:max-h-112 lg:max-h-128">
             <div className="space-y-6 pr-4">
               {groups.map((group) => (
                 <section key={group.day.toString()} className="space-y-3">
-                  <div className="sticky top-0 z-10 -mx-4 border-b bg-card/95 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground backdrop-blur supports-[backdrop-filter]:bg-card/75">
+                  <div className="sticky top-0 z-10 -mx-4 border-b bg-card/95 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground backdrop-blur supports-backdrop-filter:bg-card/75">
                     <div className="flex items-baseline justify-between gap-2">
                       <span>{group.label}</span>
                       <span>
