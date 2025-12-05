@@ -1,14 +1,18 @@
+import arkenv from 'arkenv'
 import { createStream } from 'rotating-file-stream'
 import { Logger } from 'tslog'
 
-/** Parse boolean from environment variable - accepts 'true', '1', 'yes' (case insensitive) */
-function parseBoolEnv(value: string | undefined, defaultValue: boolean): boolean {
-  if (value === undefined) return defaultValue
-  const normalized = value.toLowerCase().trim()
-  return normalized === 'true' || normalized === '1' || normalized === 'yes'
-}
+/**
+ * Environment configuration using arkenv (ArkType-based env parsing)
+ * Single source of truth for environment variables
+ */
+const env = arkenv({
+  // Parse DEBUG as string with explicit false default
+  DEBUG: "'true' | 'false' | '1' | '0' = 'false'",
+})
 
-export const DEBUG = parseBoolEnv(process.env.DEBUG, false)
+export const DEBUG = env.DEBUG === 'true' || env.DEBUG === '1'
+
 export const logger = new Logger({
   minLevel: DEBUG ? 0 : 3, // Info and above
   hideLogPositionForProduction: !DEBUG,

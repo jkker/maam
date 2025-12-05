@@ -19,7 +19,7 @@ import * as dbService from './lib/db/service'
 import { DEBUG, logger } from './lib/logger'
 import { managerService } from './lib/managers'
 import { fetchUpcomingEvents } from './lib/prts.wiki'
-import { deviceSchema, reportSchema, scheduleSchema, safeParse } from './lib/schema'
+import { deviceSchema, reportSchema, scheduleSchema } from './lib/schema'
 
 interface VariablesContext {
   manager: MaaManager
@@ -293,17 +293,15 @@ export const app = new Hono<{ Variables: VariablesContext }>()
       if (!user) user = c.req.header('x-maam-user') || ''
 
       // Fallback to trying to parse JSON body for backward compatibility (if possible)
-      // This is risky if the body is not valid JSON, but we can try-catch it.
-      // However, since we want to support arbitrary text, we shouldn't rely on this for auth.
-      // But if the user hasn't updated their webhook URL yet, they might still be sending JSON.
+      // Using arktype's native validation - returns errors if invalid
       if ((!device || !user) && text.trim().startsWith('{')) {
         try {
           const json: unknown = JSON.parse(text)
           const deviceUserSchema = type({ device: 'string', user: 'string' })
-          const result = safeParse(deviceUserSchema, json)
-          if (result.success) {
-            device = result.data.device
-            user = result.data.user
+          const result = deviceUserSchema(json)
+          if (!(result instanceof type.errors)) {
+            device = result.device
+            user = result.user
           }
         } catch {
           // Ignore JSON parse error, treat as raw text
