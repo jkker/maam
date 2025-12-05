@@ -102,13 +102,7 @@ const authMiddleware = base.middleware(async ({ context, next }) => {
     }
   }
 
-  return next({
-    context: {
-      manager,
-      user,
-      device,
-    },
-  })
+  return next({ context: { manager, user, device } })
 })
 
 const protectedProcedure = base.use(authMiddleware)

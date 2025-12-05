@@ -8,7 +8,7 @@
 import type { TaskData } from '../../Task'
 import type { ScheduleData } from '../../TaskSchedule'
 
-import { eq, desc } from 'drizzle-orm'
+import { eq } from 'drizzle-orm'
 
 import { logger } from '../logger'
 import { deviceLogs, devices, managerState, schedules, tasks, users } from './schema'
@@ -35,8 +35,8 @@ export async function createUser(userId: string, name: string) {
 
 export async function getUser(userId: string) {
   try {
-    const results = await db.select().from(users).where(eq(users.id, userId)).limit(1)
-    return results[0]
+    const [result] = await db.select().from(users).where(eq(users.id, userId)).limit(1)
+    return result
   } catch (error) {
     logger.error(`Failed to get user ${userId}:`, error)
     throw error
@@ -44,9 +44,7 @@ export async function getUser(userId: string) {
 }
 
 export async function getUserOrCreate(userId: string, name?: string) {
-  const user = await getUser(userId)
-  if (user) return user
-  return createUser(userId, name || userId)
+  return (await getUser(userId)) || createUser(userId, name || userId)
 }
 
 // ============================================================================
@@ -55,8 +53,8 @@ export async function getUserOrCreate(userId: string, name?: string) {
 
 export async function getDevice(deviceId: string) {
   try {
-    const results = await db.select().from(devices).where(eq(devices.id, deviceId)).limit(1)
-    return results[0]
+    const [result] = await db.select().from(devices).where(eq(devices.id, deviceId)).limit(1)
+    return result
   } catch (error) {
     logger.error(`Failed to get device ${deviceId}:`, error)
     throw error
@@ -73,7 +71,7 @@ export async function getDeviceOrCreate(device: string, user: string, label?: st
 
 export async function validateDeviceOwnership(device: string, userId: string): Promise<boolean> {
   try {
-    const deviceData = await getDevice(device)
+    const deviceData = await getDeviceOrCreate(device, userId)
     if (!deviceData) return false
     return deviceData.user === userId
   } catch (error) {
@@ -124,30 +122,6 @@ export async function updateTask(taskData: TaskData) {
     logger.debug(`Task updated in database: ${taskData.id}`)
   } catch (error) {
     logger.error(`Failed to update task ${taskData.id}:`, error)
-    throw error
-  }
-}
-
-export async function getTasksByDevice(device: string, limit = 100) {
-  try {
-    return await db
-      .select()
-      .from(tasks)
-      .where(eq(tasks.device, device))
-      .orderBy(desc(tasks.createdAt))
-      .limit(limit)
-  } catch (error) {
-    logger.error(`Failed to get tasks for device ${device}:`, error)
-    throw error
-  }
-}
-
-export async function getTaskById(id: string) {
-  try {
-    const results = await db.select().from(tasks).where(eq(tasks.id, id)).limit(1)
-    return results[0]
-  } catch (error) {
-    logger.error(`Failed to get task ${id}:`, error)
     throw error
   }
 }
@@ -266,36 +240,6 @@ export async function updateManagerLockState(device: string, locked: boolean) {
   }
 }
 
-export async function updateManagerHeartbeat(device: string) {
-  try {
-    await db
-      .update(managerState)
-      .set({
-        lastHeartbeat: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      })
-      .where(eq(managerState.device, device))
-    logger.debug(`Heartbeat updated for device: ${device}`)
-  } catch (error) {
-    logger.error(`Failed to update heartbeat for device ${device}:`, error)
-    throw error
-  }
-}
-
-export async function getManagerState(device: string) {
-  try {
-    const results = await db
-      .select()
-      .from(managerState)
-      .where(eq(managerState.device, device))
-      .limit(1)
-    return results[0]
-  } catch (error) {
-    logger.error(`Failed to get manager state for device ${device}:`, error)
-    throw error
-  }
-}
-
 // ============================================================================
 // Device Logs Operations
 // ============================================================================
@@ -316,20 +260,6 @@ export async function saveDeviceLog(
     logger.debug(`Device log saved for device: ${device}`)
   } catch (error) {
     logger.error(`Failed to save device log for device ${device}:`, error)
-    throw error
-  }
-}
-
-export async function getDeviceLogs(device: string, limit = 50) {
-  try {
-    return await db
-      .select()
-      .from(deviceLogs)
-      .where(eq(deviceLogs.device, device))
-      .orderBy(desc(deviceLogs.timestamp))
-      .limit(limit)
-  } catch (error) {
-    logger.error(`Failed to get device logs for device ${device}:`, error)
     throw error
   }
 }
