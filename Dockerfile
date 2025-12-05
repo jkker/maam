@@ -12,11 +12,12 @@ WORKDIR /app
 FROM base AS builder
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile
 RUN pnpm build
+RUN pnpm -F @maam/server drizzle migrate
 
 # 4. Production image
 FROM base AS runner
 COPY --from=builder /app/server/dist ./server/dist
-COPY --from=builder /app/server/package.json ./server/package.json
+COPY --from=builder /app/server/package.json /app/server/maam.db /app/server/
 WORKDIR /app/server
 
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --prod
