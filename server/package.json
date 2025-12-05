@@ -22,14 +22,23 @@
       "types": "./src/const.ts"
     },
     "./schema": {
+      "import": "./src/lib/schema.ts",
+      "types": "./src/lib/schema.ts"
+    },
+    "./db/schema": {
       "import": "./src/lib/db/schema.ts",
       "types": "./src/lib/db/schema.ts"
+    },
+    "./lib/temporal": {
+      "import": "./src/lib/temporal.ts",
+      "types": "./src/lib/temporal.ts"
     }
   },
   "dependencies": {
+    "@hono/arktype-validator": "^2.0.1",
     "@hono/node-server": "^1.19.6",
-    "@hono/zod-validator": "^0.7.5",
     "@orpc/server": "^1.12.2",
+    "arktype": "^2.1.28",
     "better-sqlite3": "^12.5.0",
     "cheerio": "^1.1.2",
     "drizzle-orm": "^0.44.7",
@@ -39,8 +48,7 @@
     "sharp": "^0.34.5",
     "temporal-polyfill": "^0.3.0",
     "toad-scheduler": "^3.1.0",
-    "tslog": "^4.10.2",
-    "zod": "^4.1.13"
+    "tslog": "^4.10.2"
   },
   "devDependencies": {
     "@hono/vite-dev-server": "^0.23.0",

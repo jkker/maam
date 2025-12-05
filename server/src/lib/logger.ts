@@ -1,7 +1,14 @@
 import { createStream } from 'rotating-file-stream'
 import { Logger } from 'tslog'
-import * as z from 'zod'
-export const DEBUG = z.stringbool().default(false).parse(process.env.DEBUG)
+
+/** Parse boolean from environment variable - accepts 'true', '1', 'yes' (case insensitive) */
+function parseBoolEnv(value: string | undefined, defaultValue: boolean): boolean {
+  if (value === undefined) return defaultValue
+  const normalized = value.toLowerCase().trim()
+  return normalized === 'true' || normalized === '1' || normalized === 'yes'
+}
+
+export const DEBUG = parseBoolEnv(process.env.DEBUG, false)
 export const logger = new Logger({
   minLevel: DEBUG ? 0 : 3, // Info and above
   hideLogPositionForProduction: !DEBUG,

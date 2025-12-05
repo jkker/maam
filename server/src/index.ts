@@ -4,22 +4,22 @@ import type { MaaManager } from './MaaManager'
 import type { TaskData } from './Task'
 import type { ScheduleData } from './TaskSchedule'
 
+import { arktypeValidator } from '@hono/arktype-validator'
 import { serveStatic } from '@hono/node-server/serve-static'
-import { zValidator } from '@hono/zod-validator'
 import { ORPCError, os, type RouterClient } from '@orpc/server'
 import { RPCHandler } from '@orpc/server/fetch'
 import { RequestHeadersPlugin } from '@orpc/server/plugins'
+import { type } from 'arktype'
 import { Hono } from 'hono'
 import { compress } from 'hono/compress'
 import { logger as loggerMiddleware } from 'hono/logger'
-import { z } from 'zod'
 
 import { TASK_TYPE } from './const'
 import * as dbService from './lib/db/service'
 import { DEBUG, logger } from './lib/logger'
 import { managerService } from './lib/managers'
 import { fetchUpcomingEvents } from './lib/prts.wiki'
-import { reportSchema, scheduleSchema, deviceSchema } from './lib/schema'
+import { deviceSchema, reportSchema, scheduleSchema, safeParse } from './lib/schema'
 
 interface VariablesContext {
   manager: MaaManager
@@ -119,10 +119,10 @@ export const router = {
      */
     login: base
       .input(
-        z.object({
-          user: z.string().min(1),
-          device: z.string().min(10),
-          label: z.string().optional(),
+        type({
+          user: 'string >= 1',
+          device: 'string >= 10',
+          'label?': 'string',
         }),
       )
       .handler(async ({ input }) => {
@@ -158,7 +158,7 @@ export const router = {
   // Lock control procedures
   locked: protectedProcedure.handler(({ context: { manager } }) => manager.locked),
   toggleLock: protectedProcedure
-    .input(z.boolean())
+    .input(type('boolean'))
     .handler(async ({ context: { manager }, input }) =>
       input ? manager.lock() : manager.unlock(),
     ),
@@ -171,20 +171,20 @@ export const router = {
       .input(scheduleSchema)
       .handler(({ context: { manager }, input }) => manager.addSchedule(input)),
     remove: protectedProcedure
-      .input(z.string())
+      .input(type('string'))
       .handler(({ context: { manager }, input }) => manager.removeSchedule(input)),
     postpone: protectedProcedure
       .input(
-        z.object({
-          id: z.string(),
-          until: z.string().optional(),
+        type({
+          id: 'string',
+          'until?': 'string',
         }),
       )
       .handler(({ context: { manager }, input }) =>
         manager.postponeSchedule(input.id, input.until),
       ),
     resume: protectedProcedure
-      .input(z.string())
+      .input(type('string'))
       .handler(({ context: { manager }, input }) => manager.resumeSchedule(input)),
   },
 
@@ -193,9 +193,9 @@ export const router = {
    */
   dispatch: protectedProcedure
     .input(
-      z.object({
-        task: z.enum(TASK_TYPE),
-        params: z.string().optional(),
+      type({
+        task: type.enumerated(...TASK_TYPE),
+        'params?': 'string',
       }),
     )
     .handler(({ context, input }) => {
@@ -238,7 +238,7 @@ export const app = new Hono<{ Variables: VariablesContext }>()
   // MAA remote control protocol endpoints using plain Hono with custom middleware
   // POST endpoints (getTask, reportStatus) receive auth via JSON body
   // Other endpoints (deviceLog, lock, unlock, screenshot) receive auth via URL params
-  .post('/maa/getTask', zValidator('json', deviceSchema), async (c) => {
+  .post('/maa/getTask', arktypeValidator('json', deviceSchema), async (c) => {
     try {
       const { device, user } = c.req.valid('json')
 
@@ -258,7 +258,7 @@ export const app = new Hono<{ Variables: VariablesContext }>()
     }
   })
 
-  .post('/maa/reportStatus', zValidator('json', reportSchema), async (c) => {
+  .post('/maa/reportStatus', arktypeValidator('json', reportSchema), async (c) => {
     try {
       const data = c.req.valid('json')
       logger.debug('Reporting task status:', data.task, data.status, data.payload?.slice(0, 30))
@@ -299,8 +299,8 @@ export const app = new Hono<{ Variables: VariablesContext }>()
       if ((!device || !user) && text.trim().startsWith('{')) {
         try {
           const json: unknown = JSON.parse(text)
-          const schema = z.object({ device: z.string(), user: z.string() })
-          const result = schema.safeParse(json)
+          const deviceUserSchema = type({ device: 'string', user: 'string' })
+          const result = safeParse(deviceUserSchema, json)
           if (result.success) {
             device = result.data.device
             user = result.data.user
@@ -399,31 +399,31 @@ export const app = new Hono<{ Variables: VariablesContext }>()
     }
   })
 
-  .get(
-    '/maa/unlock',
-    zValidator('query', z.object({ delay: z.number().optional().default(10) })),
-    async (c) => {
-      const { device, user } = c.req.query()
+  .get('/maa/unlock', async (c) => {
+    const { device, user, delay: delayStr } = c.req.query()
 
-      if (!device || !user) {
+    if (!device || !user) {
+      return c.text('Unauthorized', 401)
+    }
+
+    try {
+      const isValid = await dbService.validateDeviceOwnership(device, user)
+      if (!isValid) {
         return c.text('Unauthorized', 401)
       }
 
-      try {
-        const isValid = await dbService.validateDeviceOwnership(device, user)
-        if (!isValid) {
-          return c.text('Unauthorized', 401)
-        }
-
-        const { delay } = c.req.valid('query')
-        const manager = await managerService.getManager(device, user)
-        return c.text(manager.scheduleUnlock({ minutes: delay }))
-      } catch (error) {
-        logger.error('Unlock error:', error)
-        return c.text('Internal Server Error', 500)
+      const delay = delayStr ? parseInt(delayStr, 10) : 10
+      if (isNaN(delay)) {
+        return c.text('Invalid delay parameter', 400)
       }
-    },
-  )
+
+      const manager = await managerService.getManager(device, user)
+      return c.text(manager.scheduleUnlock({ minutes: delay }))
+    } catch (error) {
+      logger.error('Unlock error:', error)
+      return c.text('Internal Server Error', 500)
+    }
+  })
 
 // In development, redirect all other routes to the Vite dev server
 if (import.meta.env.DEV) app.get('*', (c) => c.redirect('http://localhost:3113'))

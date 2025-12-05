@@ -1,136 +1,144 @@
-import * as z from 'zod'
+/**
+ * Schema definitions using ArkType - Single Source of Truth
+ *
+ * All type definitions for the project are defined here.
+ * Both server and client code should import types from this module.
+ */
+import { type } from 'arktype'
 
-import { TASK_TYPE, type IMMEDIATE_TASK } from '../const'
+import { IMMEDIATE_TASK, TASK_TYPE } from '../const'
 
-export const reportSchema = z.object({
-  user: z.string(),
-  device: z.string(),
-  task: z.string(),
-  status: z.enum(['FAILED', 'SUCCESS']),
-  payload: z.string().optional(),
+// ============================================================================
+// Core Type Literals (Single Source of Truth)
+// ============================================================================
+
+/** Task status values (includes CANCELLED for internal use) */
+export const TASK_STATUS = ['PENDING', 'FAILED', 'SUCCESS', 'CANCELLED'] as const
+export type TaskStatus = (typeof TASK_STATUS)[number]
+
+/** Task stage values */
+export const TASK_STAGE = ['PENDING', 'RUNNING', 'DONE'] as const
+export type TaskStage = (typeof TASK_STAGE)[number]
+
+/** Report status values (subset of TaskStatus) */
+export const REPORT_STATUS = ['FAILED', 'SUCCESS'] as const
+export type ReportStatus = (typeof REPORT_STATUS)[number]
+
+/** Task types - re-export from const for convenience */
+export type TaskType = (typeof TASK_TYPE)[number]
+export type ImmediateTask = (typeof IMMEDIATE_TASK)[number]
+
+// ============================================================================
+// Schema Definitions
+// ============================================================================
+
+/**
+ * Device authentication schema
+ * Used for authenticating MAA clients
+ */
+export const deviceSchema = type({
+  device: 'string >= 10', // Device ID must be at least 10 characters
+  user: 'string',
 })
+export type Device = typeof deviceSchema.infer
 
-export const deviceSchema = z.object({
-  device: z.string().min(10),
-  user: z.string(),
+/**
+ * Task status report schema
+ * Used when MAA client reports task completion
+ */
+export const reportSchema = type({
+  user: 'string',
+  device: 'string',
+  task: 'string',
+  status: "'FAILED' | 'SUCCESS'",
+  'payload?': 'string',
 })
-export const scheduleSchema = z.object({
-  hour: z.number().min(0).max(23),
-  minute: z.number().min(0).max(59).default(0).optional(),
-  task: z.enum(TASK_TYPE).optional().default('LinkStart'),
-  params: z.string().optional(),
-  timezone: z.string().optional(),
+export type Report = typeof reportSchema.infer
+
+/**
+ * Schedule input schema
+ * Used when creating new schedules
+ * Note: `task` has a default of 'LinkStart', `minute` has a default of 0
+ */
+export const scheduleSchema = type({
+  hour: '0 <= number <= 23',
+  minute: type('0 <= number <= 59').default(0),
+  task: type.enumerated(...TASK_TYPE).default('LinkStart'),
+  'params?': 'string',
+  'timezone?': 'string',
 })
+export type Schedule = typeof scheduleSchema.infer
 
-export type Schedule = z.infer<typeof scheduleSchema>
-
+/**
+ * Schedule with metadata (returned from API)
+ */
 export type ScheduleWithMetadata = Schedule & {
   id: string
   lastRunTime?: string
   runCount?: number
   nextRunTime?: string
+  cooldownUntil?: string
 }
 
-export const taskSchema = z.object({
-  id: z.string(),
-  type: z.enum(TASK_TYPE),
-  params: z.string().optional(),
-  stage: z.enum(['PENDING', 'RUNNING', 'DONE']),
-  status: z.enum(['PENDING', 'FAILED', 'SUCCESS']).optional(),
-  payload: z.string().optional(),
-  createdAt: z.string().optional(),
-  startedAt: z.string().optional(),
-  completedAt: z.string().optional(),
-  duration: z.number().optional(),
+/**
+ * Task record schema
+ * Full task data structure with all fields
+ */
+export const taskSchema = type({
+  id: 'string',
+  type: type.enumerated(...TASK_TYPE),
+  'params?': 'string',
+  stage: "'PENDING' | 'RUNNING' | 'DONE'",
+  'status?': "'PENDING' | 'FAILED' | 'SUCCESS' | 'CANCELLED'",
+  'payload?': 'string',
+  'createdAt?': 'string',
+  'startedAt?': 'string',
+  'completedAt?': 'string',
+  'duration?': 'number',
 })
+export type TaskRecord = typeof taskSchema.infer
 
-export type TaskRecord = z.infer<typeof taskSchema>
-export type TaskType = TaskRecord['type']
-export type ImmediateTask = (typeof IMMEDIATE_TASK)[number]
-export type TaskStage = TaskRecord['stage']
-
-export const logRecordSchema = z.object({
-  timestamp: z.string(),
-  title: z.string(),
-  lines: z.array(
-    z.object({
-      timestamp: z.string(),
-      src: z.string(),
-      content: z.string(),
-    }),
-  ),
+/**
+ * Log line schema
+ */
+export const logLineSchema = type({
+  timestamp: 'string',
+  src: 'string',
+  content: 'string',
 })
+export type LogLine = typeof logLineSchema.infer
 
-export type LogRecord = z.infer<typeof logRecordSchema>
-
-export const logCodec = z.codec(z.string(), logRecordSchema, {
-  decode: (str) => {
-    // Split into main parts: timestamp|title|content
-    const [timestampStr, title, content] = str.split('|', 3)
-    // Parse main timestamp: "YYYY-MM-DD HH:mm:ss"
-    const [, year, month, day, hour, minute, second] =
-      timestampStr.match(/(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2}):(\d{2})/) || []
-
-    const timestamp = Temporal.PlainDateTime.from({
-      year: parseInt(year),
-      month: parseInt(month),
-      day: parseInt(day),
-      hour: parseInt(hour),
-      minute: parseInt(minute),
-      second: parseInt(second),
-    }).toString()
-
-    // Parse the structured log lines from content
-    // Format: [MM-DD  HH:mm:ss][Source]Message
-    const lines: { timestamp: string; src: string; content: string }[] = []
-
-    let match
-    while (
-      (match =
-        /\[(\d{2})-(\d{2})\s+(\d{2}):(\d{2}):(\d{2})\]\[([^\]]+)\]([^\n]*(?:\n(?!\[)[^\n]*)*)/g.exec(
-          content,
-        )) !== null
-    ) {
-      const [, monthStr, dayStr, hourStr, minuteStr, secondStr, src, contentStr] = match
-
-      // Determine the year based on the main timestamp
-      // If the log line's month-day is after the main timestamp's, it's from previous year
-      const lineMonth = parseInt(monthStr)
-      const lineDay = parseInt(dayStr)
-      const mainMonth = parseInt(month)
-      const mainDay = parseInt(day)
-
-      let lineYear = parseInt(year)
-      if (lineMonth > mainMonth || (lineMonth === mainMonth && lineDay > mainDay)) {
-        lineYear -= 1
-      }
-
-      const lineTimestamp = Temporal.PlainDateTime.from({
-        year: lineYear,
-        month: lineMonth,
-        day: lineDay,
-        hour: parseInt(hourStr),
-        minute: parseInt(minuteStr),
-        second: parseInt(secondStr),
-      }).toString()
-
-      lines.push({
-        timestamp: lineTimestamp,
-        src: src.trim(),
-        content: contentStr.trim(),
-      })
-    }
-
-    return {
-      timestamp,
-      title,
-      lines,
-    }
-  },
-  encode: (log) => {
-    const lines = log.lines
-      .map((line) => `[${line.timestamp}] [${line.src}] ${line.content}`)
-      .join('\n')
-    return `[${log.timestamp}] ${log.title}\n${lines}`
-  },
+/**
+ * Log record schema
+ */
+export const logRecordSchema = type({
+  timestamp: 'string',
+  title: 'string',
+  lines: logLineSchema.array(),
 })
+export type LogRecord = typeof logRecordSchema.infer
+
+// ============================================================================
+// Validation Helpers
+// ============================================================================
+
+/**
+ * Validates and returns typed data, or throws on validation failure
+ */
+export function validate<T>(schema: { assert: (data: unknown) => T }, data: unknown): T {
+  return schema.assert(data)
+}
+
+/**
+ * Safe validation that returns result or errors
+ */
+export function safeParse<T>(
+  schema: { (data: unknown): T | type.errors },
+  data: unknown,
+): { success: true; data: T } | { success: false; errors: type.errors } {
+  const result = schema(data)
+  if (result instanceof type.errors) {
+    return { success: false, errors: result }
+  }
+  return { success: true, data: result }
+}
