@@ -412,9 +412,10 @@ export const app = new Hono<{ Variables: VariablesContext }>()
         return c.text('Unauthorized', 401)
       }
 
+      // Parse and validate delay parameter (default: 10 minutes, range: 1-1440 minutes)
       const delay = delayStr ? parseInt(delayStr, 10) : 10
-      if (isNaN(delay)) {
-        return c.text('Invalid delay parameter', 400)
+      if (isNaN(delay) || delay < 1 || delay > 1440) {
+        return c.text('Invalid delay parameter (must be 1-1440 minutes)', 400)
       }
 
       const manager = await managerService.getManager(device, user)

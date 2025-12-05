@@ -58,7 +58,11 @@ export type Report = typeof reportSchema.infer
 /**
  * Schedule input schema
  * Used when creating new schedules
- * Note: `task` has a default of 'LinkStart', `minute` has a default of 0
+ *
+ * In ArkType, `.default()` makes a field implicitly optional at input while
+ * ensuring the output type always includes the field with the default applied.
+ * - `minute` defaults to 0 if not provided
+ * - `task` defaults to 'LinkStart' if not provided
  */
 export const scheduleSchema = type({
   hour: '0 <= number <= 23',
@@ -71,12 +75,19 @@ export type Schedule = typeof scheduleSchema.infer
 
 /**
  * Schedule with metadata (returned from API)
+ * Extends Schedule with runtime metadata that is NOT part of the input schema.
+ * These fields are added by the server after the schedule is created/restored.
  */
 export type ScheduleWithMetadata = Schedule & {
+  /** Unique identifier for the schedule (generated from task|hour:minute) */
   id: string
+  /** ISO timestamp of last execution */
   lastRunTime?: string
+  /** Total number of times this schedule has executed */
   runCount?: number
+  /** ISO timestamp of next scheduled execution */
   nextRunTime?: string
+  /** ISO timestamp until which the schedule is postponed (cooldown period) */
   cooldownUntil?: string
 }
 
@@ -122,18 +133,35 @@ export type LogRecord = typeof logRecordSchema.infer
 // Validation Helpers
 // ============================================================================
 
+/** Interface for schema objects that support assertion */
+interface AssertableSchema<T> {
+  assert: (data: unknown) => T
+}
+
+/** Interface for schema objects that are callable and return T or errors */
+interface CallableSchema<T> {
+  (data: unknown): T | type.errors
+}
+
 /**
  * Validates and returns typed data, or throws on validation failure
+ * @param schema - An ArkType schema with an assert method
+ * @param data - The data to validate
+ * @returns The validated and typed data
+ * @throws ArkErrors if validation fails
  */
-export function validate<T>(schema: { assert: (data: unknown) => T }, data: unknown): T {
+export function validate<T>(schema: AssertableSchema<T>, data: unknown): T {
   return schema.assert(data)
 }
 
 /**
- * Safe validation that returns result or errors
+ * Safe validation that returns a discriminated union result
+ * @param schema - An ArkType schema (callable)
+ * @param data - The data to validate
+ * @returns Object with success: true and data, or success: false and errors
  */
 export function safeParse<T>(
-  schema: { (data: unknown): T | type.errors },
+  schema: CallableSchema<T>,
   data: unknown,
 ): { success: true; data: T } | { success: false; errors: type.errors } {
   const result = schema(data)
@@ -142,3 +170,12 @@ export function safeParse<T>(
   }
   return { success: true, data: result }
 }
+
+/**
+ * Delay query parameter schema for unlock endpoint
+ * Validates delay is a positive number within reasonable bounds (1-1440 minutes = 1 min to 24 hours)
+ */
+export const delayQuerySchema = type({
+  'delay?': '1 <= number <= 1440',
+})
+export type DelayQuery = typeof delayQuerySchema.infer
