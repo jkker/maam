@@ -851,7 +851,6 @@ function TaskTimelineItem({
             <p className="font-medium text-primary">
               {runTime.toLocaleString(undefined, {
                 timeStyle: 'short',
-                timeZone: scheduleTimezone,
               })}
             </p>
           </div>
