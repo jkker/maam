@@ -283,15 +283,47 @@ export const app = new Hono<{ Variables: VariablesContext }>()
     const text = await c.req.text()
     logger.debug('Received MAA Log:', text.slice(0, 100))
     try {
-      const { device, user } = JSON.parse(text) as { device: string; user: string }
+      let { device, user } = c.req.query() as {
+        device?: string | string[]
+        user?: string | string[]
+      }
+
+      // Fallback to headers if not in query
+      if (!device) device = c.req.header('x-maam-device') || ''
+      if (!user) user = c.req.header('x-maam-user') || ''
+
+      // Fallback to trying to parse JSON body for backward compatibility (if possible)
+      // This is risky if the body is not valid JSON, but we can try-catch it.
+      // However, since we want to support arbitrary text, we shouldn't rely on this for auth.
+      // But if the user hasn't updated their webhook URL yet, they might still be sending JSON.
+      if ((!device || !user) && text.trim().startsWith('{')) {
+        try {
+          const json: unknown = JSON.parse(text)
+          const schema = z.object({ device: z.string(), user: z.string() })
+          const result = schema.safeParse(json)
+          if (result.success) {
+            device = result.data.device
+            user = result.data.user
+          }
+        } catch {
+          // Ignore JSON parse error, treat as raw text
+        }
+      }
+
+      if (!device || !user) {
+        return c.json({ success: false, error: 'Unauthorized: Missing device or user' }, 401)
+      }
+
+      const deviceStr = Array.isArray(device) ? device[0] : device
+      const userStr = Array.isArray(user) ? user[0] : user
 
       // Validate and get manager
-      const isValid = await dbService.validateDeviceOwnership(device, user)
+      const isValid = await dbService.validateDeviceOwnership(deviceStr, userStr)
       if (!isValid) {
         return c.json({ success: false, error: 'Unauthorized' }, 401)
       }
 
-      const manager = await managerService.getManager(device, user)
+      const manager = await managerService.getManager(deviceStr, userStr)
       manager.deviceLog(text)
       return c.json({ success: true })
     } catch (error) {

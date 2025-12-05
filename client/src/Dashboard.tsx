@@ -69,6 +69,7 @@ import { Skeleton } from './components/ui/skeleton'
 import { Spinner } from './components/ui/spinner'
 import { UserMenu } from './components/UserMenu'
 import { Footer, Header } from './Layout'
+import { useAuthStore } from './lib/auth-store'
 import { invalidateQueries, useRPC } from './lib/orpc'
 
 export default function Dashboard() {
@@ -160,11 +161,12 @@ function ConfigViewer({
   className?: string
 }) {
   const [copied, setCopied] = useState<string>()
+  const { user, device } = useAuthStore()
 
   const urls = {
     'Get Task': baseURL + '/maa/getTask',
     'Report Status': baseURL + '/maa/reportStatus',
-    'Device Log Webhook': baseURL + '/maa/deviceLog',
+    'Device Log Webhook': `${baseURL}/maa/deviceLog?device=${device}&user=${user}`,
   }
 
   return (
@@ -178,7 +180,7 @@ function ConfigViewer({
       </CardHeader>
       <CardContent className="space-y-4">
         {Object.entries(urls).map(([label, url]) => (
-          <Field key={url} className="gap-2">
+          <Field key={label} className="gap-2">
             <FieldLabel htmlFor={url}>{label}</FieldLabel>
             <InputGroup
               onClick={async (e: React.MouseEvent) => {
@@ -847,7 +849,10 @@ function TaskTimelineItem({
           <div>
             <span className="text-muted-foreground">Schedule timezone ({scheduleTimezone})</span>
             <p className="font-medium text-primary">
-              {runTime.toLocaleString(undefined, { timeStyle: 'short', timeZoneName: 'short' })}
+              {runTime.toLocaleString(undefined, {
+                timeStyle: 'short',
+                timeZone: scheduleTimezone,
+              })}
             </p>
           </div>
           {schedule.params && (
@@ -936,12 +941,21 @@ export function LogViewer({ className }: { className?: string }) {
               </Empty>
             ) : (
               logs.map((log, idx) => {
-                const [title, content] = log.split('|', 2)
+                // Use the first line as the title, truncated if too long
+                const firstLine = log.split('\n')[0]
+                const title = firstLine.length > 80 ? firstLine.substring(0, 80) + '...' : firstLine
+
                 return (
-                  <AccordionItem key={idx} value={title} className="text-xs whitespace-pre-wrap">
-                    <AccordionTrigger className="font-normal py-2">{title}</AccordionTrigger>
+                  <AccordionItem
+                    key={idx}
+                    value={idx.toString()}
+                    className="text-xs whitespace-pre-wrap"
+                  >
+                    <AccordionTrigger className="font-normal py-2 text-left font-mono">
+                      {title}
+                    </AccordionTrigger>
                     <AccordionContent className="font-mono text-muted-foreground whitespace-pre-wrap text-[0.75rem]">
-                      {content.trim()}
+                      {log.trim()}
                     </AccordionContent>
                   </AccordionItem>
                 )
