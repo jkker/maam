@@ -6,7 +6,7 @@ import type { ScheduleData } from './TaskSchedule'
 
 import { serveStatic } from '@hono/node-server/serve-static'
 import { zValidator } from '@hono/zod-validator'
-import { ORPCError, os } from '@orpc/server'
+import { ORPCError, os, type RouterClient } from '@orpc/server'
 import { RPCHandler } from '@orpc/server/fetch'
 import { RequestHeadersPlugin } from '@orpc/server/plugins'
 import { Hono } from 'hono'
@@ -219,170 +219,89 @@ export const router = {
   eventCalendar: base.handler(async () => fetchUpcomingEvents()),
 }
 
-/**
- * Export type for use in client
- */
-export type ORPCRouter = typeof router
+export type ORPC = RouterClient<typeof router>
+const handler = new RPCHandler(router, { plugins: [new RequestHeadersPlugin()] })
 
-export const app = new Hono<{ Variables: VariablesContext }>().use(compress())
+export const app = new Hono<{ Variables: VariablesContext }>()
+  .use(compress())
+  // Mount oRPC handler for main API
+  .use('/rpc/*', async (c, next) => {
+    const { matched, response } = await handler.handle(c.req.raw, {
+      prefix: '/rpc',
+      context: {}, // Context populated by RequestHeadersPlugin
+    })
+    if (matched) return c.newResponse(response.body, response)
 
-// Setup oRPC handler with RequestHeadersPlugin for auth via HTTP headers
-const rpcHandler = new RPCHandler(router, {
-  plugins: [new RequestHeadersPlugin()],
-  interceptors: [],
-})
-
-// Mount oRPC handler for main API
-app.use('/rpc/*', async (c, next) => {
-  const { matched, response } = await rpcHandler.handle(c.req.raw, {
-    prefix: '/rpc',
-    context: {}, // Context populated by RequestHeadersPlugin
+    await next()
   })
 
-  if (matched) {
-    return c.newResponse(response.body, response)
-  }
+  // MAA remote control protocol endpoints using plain Hono with custom middleware
+  // POST endpoints (getTask, reportStatus) receive auth via JSON body
+  // Other endpoints (deviceLog, lock, unlock, screenshot) receive auth via URL params
+  .post('/maa/getTask', zValidator('json', deviceSchema), async (c) => {
+    try {
+      const { device, user } = c.req.valid('json')
 
-  await next()
-})
+      // Validate and get manager
+      const isValid = await dbService.validateDeviceOwnership(device, user)
+      if (!isValid) {
+        return c.json({ error: 'Unauthorized' }, 401)
+      }
 
-// MAA remote control protocol endpoints using plain Hono with custom middleware
-// POST endpoints (getTask, reportStatus) receive auth via JSON body
-// Other endpoints (deviceLog, lock, unlock, screenshot) receive auth via URL params
-
-app.post('/maa/getTask', zValidator('json', deviceSchema), async (c) => {
-  try {
-    const { device, user } = c.req.valid('json')
-
-    // Validate and get manager
-    const isValid = await dbService.validateDeviceOwnership(device, user)
-    if (!isValid) {
-      return c.json({ error: 'Unauthorized' }, 401)
+      const manager = await managerService.getManager(device, user)
+      const tasks = manager.getTask()
+      logger.debug('Providing tasks to MAA client:', tasks)
+      return c.json({ tasks })
+    } catch (error) {
+      logger.error('Failed to get tasks:', error)
+      return c.json({ tasks: [] }, 500)
     }
+  })
 
-    const manager = await managerService.getManager(device, user)
-    const tasks = manager.getTask()
-    logger.debug('Providing tasks to MAA client:', tasks)
-    return c.json({ tasks })
-  } catch (error) {
-    logger.error('Failed to get tasks:', error)
-    return c.json({ tasks: [] }, 500)
-  }
-})
+  .post('/maa/reportStatus', zValidator('json', reportSchema), async (c) => {
+    try {
+      const data = c.req.valid('json')
+      logger.debug('Reporting task status:', data.task, data.status, data.payload?.slice(0, 30))
 
-app.post('/maa/reportStatus', zValidator('json', reportSchema), async (c) => {
-  try {
-    const data = c.req.valid('json')
-    logger.debug('Reporting task status:', data.task, data.status, data.payload?.slice(0, 30))
+      // Validate and get manager
+      const isValid = await dbService.validateDeviceOwnership(data.device, data.user)
+      if (!isValid) {
+        return c.text('unauthorized', 401)
+      }
 
-    // Validate and get manager
-    const isValid = await dbService.validateDeviceOwnership(data.device, data.user)
-    if (!isValid) {
-      return c.text('unauthorized', 401)
+      const manager = await managerService.getManager(data.device, data.user)
+      const task = manager.reportStatus(data)
+      if (task) return c.text('success')
+    } catch (error) {
+      logger.error('Failed to report task status:', error)
+      return c.text('internal server error', 500)
     }
+    return c.text('task not found', 404)
+  })
 
-    const manager = await managerService.getManager(data.device, data.user)
-    const task = manager.reportStatus(data)
-    if (task) return c.text('success')
-  } catch (error) {
-    logger.error('Failed to report task status:', error)
-    return c.text('internal server error', 500)
-  }
-  return c.text('task not found', 404)
-})
+  .post('/maa/deviceLog', async (c) => {
+    const text = await c.req.text()
+    logger.debug('Received MAA Log:', text.slice(0, 100))
+    try {
+      const { device, user } = JSON.parse(text) as { device: string; user: string }
 
-app.post('/maa/deviceLog', async (c) => {
-  const text = await c.req.text()
-  logger.debug('Received MAA Log:', text.slice(0, 100))
-  try {
-    const { device, user } = JSON.parse(text) as { device: string; user: string }
+      // Validate and get manager
+      const isValid = await dbService.validateDeviceOwnership(device, user)
+      if (!isValid) {
+        return c.json({ success: false, error: 'Unauthorized' }, 401)
+      }
 
-    // Validate and get manager
-    const isValid = await dbService.validateDeviceOwnership(device, user)
-    if (!isValid) {
-      return c.json({ success: false, error: 'Unauthorized' }, 401)
+      const manager = await managerService.getManager(device, user)
+      manager.deviceLog(text)
+      return c.json({ success: true })
+    } catch (error) {
+      logger.error(`Failed to report MAA Log:`, error)
+      return c.json({ success: false, error: JSON.stringify(error) }, 500)
     }
+  })
 
-    const manager = await managerService.getManager(device, user)
-    manager.deviceLog(text)
-    return c.json({ success: true })
-  } catch (error) {
-    logger.error(`Failed to report MAA Log:`, error)
-    return c.json({ success: false, error: JSON.stringify(error) }, 500)
-  }
-})
-
-// Screenshot endpoints - require auth query params
-app.get('/maa/screenshot.jpg', async (c) => {
-  const { device, user } = c.req.query()
-
-  if (!device || !user) {
-    return c.text('Unauthorized', 401)
-  }
-
-  try {
-    const isValid = await dbService.validateDeviceOwnership(device, user)
-    if (!isValid) {
-      return c.text('Unauthorized', 401)
-    }
-
-    const manager = await managerService.getManager(device, user)
-    const image = await manager.getScreenshotJPEG()
-    return c.body(image, 200, {
-      'Content-Type': 'image/jpeg',
-      'Content-Length': image.length.toString(),
-    })
-  } catch (error) {
-    logger.error('Screenshot error:', error)
-    return c.text('Internal Server Error', 500)
-  }
-})
-
-app.get('/maa/screenshot.mjpeg', async (c) => {
-  const { device, user } = c.req.query()
-
-  if (!device || !user) {
-    return c.text('Unauthorized', 401)
-  }
-
-  try {
-    const isValid = await dbService.validateDeviceOwnership(device, user)
-    if (!isValid) return c.text('Unauthorized', 401)
-
-    const manager = await managerService.getManager(device, user)
-    return manager.streamResponse()
-  } catch (error) {
-    logger.error('Screenshot stream error:', error)
-    return c.text('Internal Server Error', 500)
-  }
-})
-
-// Management endpoints - require auth query params
-app.get('/maa/lock', async (c) => {
-  const { device, user } = c.req.query()
-
-  if (!device || !user) {
-    return c.text('Unauthorized', 401)
-  }
-
-  try {
-    const isValid = await dbService.validateDeviceOwnership(device, user)
-    if (!isValid) {
-      return c.text('Unauthorized', 401)
-    }
-
-    const manager = await managerService.getManager(device, user)
-    return c.text((await manager.lock()).message)
-  } catch (error) {
-    logger.error('Lock error:', error)
-    return c.text('Internal Server Error', 500)
-  }
-})
-
-app.get(
-  '/maa/unlock',
-  zValidator('query', z.object({ delay: z.number().optional().default(10) })),
-  async (c) => {
+  // Screenshot endpoints - require auth query params
+  .get('/maa/screenshot.jpg', async (c) => {
     const { device, user } = c.req.query()
 
     if (!device || !user) {
@@ -395,15 +314,84 @@ app.get(
         return c.text('Unauthorized', 401)
       }
 
-      const { delay } = c.req.valid('query')
       const manager = await managerService.getManager(device, user)
-      return c.text(manager.scheduleUnlock({ minutes: delay }))
+      const image = await manager.getScreenshotJPEG()
+      return c.body(image, 200, {
+        'Content-Type': 'image/jpeg',
+        'Content-Length': image.length.toString(),
+      })
     } catch (error) {
-      logger.error('Unlock error:', error)
+      logger.error('Screenshot error:', error)
       return c.text('Internal Server Error', 500)
     }
-  },
-)
+  })
+
+  .get('/maa/screenshot.mjpeg', async (c) => {
+    const { device, user } = c.req.query()
+
+    if (!device || !user) {
+      return c.text('Unauthorized', 401)
+    }
+
+    try {
+      const isValid = await dbService.validateDeviceOwnership(device, user)
+      if (!isValid) return c.text('Unauthorized', 401)
+
+      const manager = await managerService.getManager(device, user)
+      return manager.streamResponse()
+    } catch (error) {
+      logger.error('Screenshot stream error:', error)
+      return c.text('Internal Server Error', 500)
+    }
+  })
+
+  // Management endpoints - require auth query params
+  .get('/maa/lock', async (c) => {
+    const { device, user } = c.req.query()
+
+    if (!device || !user) {
+      return c.text('Unauthorized', 401)
+    }
+
+    try {
+      const isValid = await dbService.validateDeviceOwnership(device, user)
+      if (!isValid) {
+        return c.text('Unauthorized', 401)
+      }
+
+      const manager = await managerService.getManager(device, user)
+      return c.text((await manager.lock()).message)
+    } catch (error) {
+      logger.error('Lock error:', error)
+      return c.text('Internal Server Error', 500)
+    }
+  })
+
+  .get(
+    '/maa/unlock',
+    zValidator('query', z.object({ delay: z.number().optional().default(10) })),
+    async (c) => {
+      const { device, user } = c.req.query()
+
+      if (!device || !user) {
+        return c.text('Unauthorized', 401)
+      }
+
+      try {
+        const isValid = await dbService.validateDeviceOwnership(device, user)
+        if (!isValid) {
+          return c.text('Unauthorized', 401)
+        }
+
+        const { delay } = c.req.valid('query')
+        const manager = await managerService.getManager(device, user)
+        return c.text(manager.scheduleUnlock({ minutes: delay }))
+      } catch (error) {
+        logger.error('Unlock error:', error)
+        return c.text('Internal Server Error', 500)
+      }
+    },
+  )
 
 // In development, redirect all other routes to the Vite dev server
 if (import.meta.env.DEV) app.get('*', (c) => c.redirect('http://localhost:3113'))
@@ -412,9 +400,6 @@ else app.use(serveStatic({ root: 'dist/public', index: 'index.html' }))
 
 // Apply logging middleware in debug mode
 if (DEBUG) app.use(loggerMiddleware())
-
-// Re-export RouterClient type for client-side usage
-export type { RouterClient } from '@orpc/server'
 
 export default app
 export type { ScheduleData, TaskData }

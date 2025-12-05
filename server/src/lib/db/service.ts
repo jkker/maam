@@ -71,7 +71,7 @@ export async function getDeviceOrCreate(device: string, user: string, label?: st
 
 export async function validateDeviceOwnership(device: string, userId: string): Promise<boolean> {
   try {
-    const deviceData = await getDeviceOrCreate(device, userId)
+    const deviceData = await getDevice(device)
     if (!deviceData) return false
     return deviceData.user === userId
   } catch (error) {

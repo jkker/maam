@@ -1,4 +1,4 @@
-import type { RouterClient, router } from '@maam/server'
+import type { ORPC } from '@maam/server'
 
 import { createORPCClient } from '@orpc/client'
 import { RPCLink } from '@orpc/client/fetch'
@@ -35,9 +35,9 @@ export function useRPC() {
       'x-maam-device': device,
     },
   })
-  const screenshotURL = `/maa/screenshot?user=${encodeURIComponent(user!)}&device=${encodeURIComponent(device!)}`
+  const screenshotURL = `/maa/screenshot.mjpeg?user=${user}&device=${device}`
 
-  const orpcClient: RouterClient<typeof router> = createORPCClient(link)
-  const orpc = createRouterUtils(orpcClient)
+  const client: ORPC = createORPCClient(link)
+  const orpc = createRouterUtils(client)
   return { orpc, isAuthenticated, screenshotURL }
 }
