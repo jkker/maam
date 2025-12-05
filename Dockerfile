@@ -10,7 +10,7 @@ WORKDIR /app
 
 # 2. Install all dependencies and build the application
 FROM base AS builder
-RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile
+RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile --ignore-scripts
 RUN pnpm build
 
 # 4. Production image
@@ -19,7 +19,7 @@ COPY --from=builder /app/server/dist ./server/dist
 COPY --from=builder /app/server/package.json ./server/package.json
 WORKDIR /app/server
 
-RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --prod
+RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --prod --ignore-scripts
 CMD ["node", "dist/server.js"]
 
 EXPOSE 3113
