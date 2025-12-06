@@ -233,6 +233,9 @@ importers:
       arkenv:
         specifier: ^0.7.6
         version: 0.7.6(arktype@2.1.28)
+      arkregex:
+        specifier: ^0.0.4
+        version: 0.0.4
       arktype:
         specifier: ^2.1.28
         version: 2.1.28
