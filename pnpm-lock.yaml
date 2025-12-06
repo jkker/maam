@@ -178,9 +178,6 @@ importers:
       temporal-polyfill:
         specifier: ^0.3.0
         version: 0.3.0
-      zod:
-        specifier: ^4.1.13
-        version: 4.1.13
       zustand:
         specifier: ^5.0.9
         version: 5.0.9(@types/react@19.2.7)(react@19.2.1)(use-sync-external-store@1.6.0(react@19.2.1))
@@ -224,21 +221,33 @@ importers:
 
   server:
     dependencies:
+      '@hono/arktype-validator':
+        specifier: ^2.0.1
+        version: 2.0.1(arktype@2.1.28)(hono@4.10.7)
       '@hono/node-server':
         specifier: ^1.19.6
         version: 1.19.6(hono@4.10.7)
-      '@hono/zod-validator':
-        specifier: ^0.7.5
-        version: 0.7.5(hono@4.10.7)(zod@4.1.13)
       '@orpc/server':
         specifier: ^1.12.2
         version: 1.12.2(ws@8.18.3)
+      arkenv:
+        specifier: ^0.7.6
+        version: 0.7.6(arktype@2.1.28)
+      arkregex:
+        specifier: ^0.0.4
+        version: 0.0.4
+      arktype:
+        specifier: ^2.1.28
+        version: 2.1.28
       better-sqlite3:
         specifier: ^12.5.0
         version: 12.5.0
       cheerio:
         specifier: ^1.1.2
         version: 1.1.2
+      drizzle-arktype:
+        specifier: ^0.1.3
+        version: 0.1.3(arktype@2.1.28)(drizzle-orm@0.44.7(@types/better-sqlite3@7.6.13)(better-sqlite3@12.5.0))
       drizzle-orm:
         specifier: ^0.44.7
         version: 0.44.7(@types/better-sqlite3@7.6.13)(better-sqlite3@12.5.0)
@@ -263,9 +272,6 @@ importers:
       tslog:
         specifier: ^4.10.2
         version: 4.10.2
-      zod:
-        specifier: ^4.1.13
-        version: 4.1.13
     devDependencies:
       '@hono/vite-dev-server':
         specifier: ^0.23.0
@@ -301,6 +307,18 @@ packages:
     engines: { node: '>=10' }
     peerDependencies:
       ajv: '>=8'
+
+  '@ark/schema@0.56.0':
+    resolution:
+      {
+        integrity: sha512-ECg3hox/6Z/nLajxXqNhgPtNdHWC9zNsDyskwO28WinoFEnWow4IsERNz9AnXRhTZJnYIlAJ4uGn3nlLk65vZA==,
+      }
+
+  '@ark/util@0.56.0':
+    resolution:
+      {
+        integrity: sha512-BghfRC8b9pNs3vBoDJhcta0/c1J1rsoS1+HgVUreMFPdhz/CRAKReAu57YEllNaSy98rWAdY1gE+gFup7OXpgA==,
+      }
 
   '@babel/code-frame@7.27.1':
     resolution:
@@ -1735,6 +1753,15 @@ packages:
       react: ^18 || ^19 || ^19.0.0-rc
       react-dom: ^18 || ^19 || ^19.0.0-rc
 
+  '@hono/arktype-validator@2.0.1':
+    resolution:
+      {
+        integrity: sha512-Z4PQFtzgbGneBap+TTViRIBAoUWbwEwg8PaKNqALAP6z9N2ksJI81PfcsSQNUzwtrn8LipkMvBb8/D9Pei2GJw==,
+      }
+    peerDependencies:
+      arktype: ^2.0.0-dev.14
+      hono: '*'
+
   '@hono/node-server@1.19.6':
     resolution:
       {
@@ -1759,15 +1786,6 @@ packages:
         optional: true
       wrangler:
         optional: true
-
-  '@hono/zod-validator@0.7.5':
-    resolution:
-      {
-        integrity: sha512-n4l4hutkfYU07PzRUHBOVzUEn38VSfrh+UVE5d0w4lyfWDOEhzxIupqo5iakRiJL44c3vTuFJBvcmUl8b9agIA==,
-      }
-    peerDependencies:
-      hono: '>=3.9.0'
-      zod: ^3.25.0 || ^4.0.0
 
   '@humanfs/core@0.19.1':
     resolution:
@@ -4086,6 +4104,26 @@ packages:
         integrity: sha512-b0P0sZPKtyu8HkeRAfCq0IfURZK+SuwMjY1UXGBU27wpAiTwQAIlq56IbIO+ytk/JjS1fMR14ee5WBBfKi5J6A==,
       }
 
+  arkenv@0.7.6:
+    resolution:
+      {
+        integrity: sha512-EUf1s6L7kbN3zhp0F/YMvZ96lImdZVdT6dw5Kptr91pKodn6MtTa6pVCwn5CtgF1ZaHcIddeYM2qf0GbPhxrRA==,
+      }
+    peerDependencies:
+      arktype: ^2.1.22
+
+  arkregex@0.0.4:
+    resolution:
+      {
+        integrity: sha512-biS/FkvSwQq59TZ453piUp8bxMui11pgOMV9WHAnli1F8o0ayNCZzUwQadL/bGIUic5TkS/QlPcyMuI8ZIwedQ==,
+      }
+
+  arktype@2.1.28:
+    resolution:
+      {
+        integrity: sha512-LVZqXl2zWRpNFnbITrtFmqeqNkPPo+KemuzbGSY6jvJwCb4v8NsDzrWOLHnQgWl26TkJeWWcUNUeBpq2Mst1/Q==,
+      }
+
   array-buffer-byte-length@1.0.2:
     resolution:
       {
@@ -4588,6 +4626,15 @@ packages:
       {
         integrity: sha512-6kZKyUajlDuqlHKVX1w7gyslj9MPIXzIFiz/rGu35uC1wMi+kMhQwGhl4lt9unC9Vb9INnY9Z3/ZA3+FhASLaw==,
       }
+
+  drizzle-arktype@0.1.3:
+    resolution:
+      {
+        integrity: sha512-X66GB2pz7Nb+NmCZefDXpdoglxjGYnB2yRU5umAK2stVkl4rvV6i6XbMg1+w1HiY/ydC8gJVq4jKAARYazpb3g==,
+      }
+    peerDependencies:
+      arktype: '>=2.0.0'
+      drizzle-orm: '>=0.36.0'
 
   drizzle-kit@0.31.8:
     resolution:
@@ -7914,6 +7961,12 @@ snapshots:
       jsonpointer: 5.0.1
       leven: 3.1.0
 
+  '@ark/schema@0.56.0':
+    dependencies:
+      '@ark/util': 0.56.0
+
+  '@ark/util@0.56.0': {}
+
   '@babel/code-frame@7.27.1':
     dependencies:
       '@babel/helper-validator-identifier': 7.28.5
@@ -8910,6 +8963,11 @@ snapshots:
       react-dom: 19.2.1(react@19.2.1)
       use-sync-external-store: 1.6.0(react@19.2.1)
 
+  '@hono/arktype-validator@2.0.1(arktype@2.1.28)(hono@4.10.7)':
+    dependencies:
+      arktype: 2.1.28
+      hono: 4.10.7
+
   '@hono/node-server@1.19.6(hono@4.10.7)':
     dependencies:
       hono: 4.10.7
@@ -8919,11 +8977,6 @@ snapshots:
       '@hono/node-server': 1.19.6(hono@4.10.7)
       hono: 4.10.7
       minimatch: 9.0.5
-
-  '@hono/zod-validator@0.7.5(hono@4.10.7)(zod@4.1.13)':
-    dependencies:
-      hono: 4.10.7
-      zod: 4.1.13
 
   '@humanfs/core@0.19.1': {}
 
@@ -10421,6 +10474,20 @@ snapshots:
       dequal: 2.0.3
     optional: true
 
+  arkenv@0.7.6(arktype@2.1.28):
+    dependencies:
+      arktype: 2.1.28
+
+  arkregex@0.0.4:
+    dependencies:
+      '@ark/util': 0.56.0
+
+  arktype@2.1.28:
+    dependencies:
+      '@ark/schema': 0.56.0
+      '@ark/util': 0.56.0
+      arkregex: 0.0.4
+
   array-buffer-byte-length@1.0.2:
     dependencies:
       call-bound: 1.0.4
@@ -10718,6 +10785,11 @@ snapshots:
       dom-serializer: 2.0.0
       domelementtype: 2.3.0
       domhandler: 5.0.3
+
+  drizzle-arktype@0.1.3(arktype@2.1.28)(drizzle-orm@0.44.7(@types/better-sqlite3@7.6.13)(better-sqlite3@12.5.0)):
+    dependencies:
+      arktype: 2.1.28
+      drizzle-orm: 0.44.7(@types/better-sqlite3@7.6.13)(better-sqlite3@12.5.0)
 
   drizzle-kit@0.31.8:
     dependencies:

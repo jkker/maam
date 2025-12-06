@@ -49,7 +49,8 @@ const statusIcons: Record<string, LucideIcon> = {
 }
 
 interface TaskStatusBadgeProps
-  extends Omit<React.ComponentProps<'span'>, 'children'>,
+  extends
+    Omit<React.ComponentProps<'span'>, 'children'>,
     VariantProps<typeof taskStatusBadgeVariants> {
   iconOnly?: boolean
   children?: React.ReactNode
