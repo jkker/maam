@@ -47,6 +47,7 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { cn, formatTaskType } from '@/lib/utils'
 
+import { Analytics } from './components/Analytics'
 import { ScheduleManager } from './components/ScheduleManager'
 import { TaskStatusBadge } from './components/task-status-badge'
 
@@ -108,6 +109,8 @@ export default function Dashboard() {
           <QuickActions locked={locked} connected={isSuccess} />
           <LockToggle locked={locked} connected={isSuccess} />
         </div>
+
+        <Analytics className="col-span-full" />
 
         <TaskManager className="col-span-full lg:col-span-6" />
         <LogViewer className="col-span-full lg:col-span-6" />

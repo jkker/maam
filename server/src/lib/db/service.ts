@@ -8,12 +8,61 @@
 import type { TaskData } from '../../Task'
 import type { ScheduleData } from '../../TaskSchedule'
 
-import { eq } from 'drizzle-orm'
+import { and, avg, count, eq, sql } from 'drizzle-orm'
 
 import { logger } from '../logger'
 import { deviceLogs, devices, managerState, schedules, tasks, users } from './schema'
 
 import { db } from '.'
+
+// ============================================================================
+// Analytics Operations
+// ============================================================================
+
+export async function getTaskStats(device: string) {
+  try {
+    // Overall counts
+    const [counts] = await db
+      .select({
+        total: count(),
+        success: count(
+          sql`CASE WHEN ${tasks.stage} = 'DONE' AND (${tasks.status} IS NULL OR ${tasks.status} NOT IN ('FAILED', 'CANCELLED')) THEN 1 END`,
+        ),
+        failed: count(sql`CASE WHEN ${tasks.status} = 'FAILED' THEN 1 END`),
+        cancelled: count(sql`CASE WHEN ${tasks.status} = 'CANCELLED' THEN 1 END`),
+        avgDuration: avg(tasks.duration),
+      })
+      .from(tasks)
+      .where(eq(tasks.device, device))
+
+    // Recent activity (last 7 days)
+    // We fetch raw data and aggregate in application code for flexibility
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
+    const recentTasks = await db
+      .select({
+        createdAt: tasks.createdAt,
+        status: tasks.status,
+        stage: tasks.stage,
+        type: tasks.type,
+      })
+      .from(tasks)
+      .where(and(eq(tasks.device, device), sql`${tasks.createdAt} >= ${sevenDaysAgo}`))
+
+    return {
+      overview: {
+        total: counts?.total ?? 0,
+        success: counts?.success ?? 0,
+        failed: counts?.failed ?? 0,
+        cancelled: counts?.cancelled ?? 0,
+        avgDuration: Math.round(Number(counts?.avgDuration ?? 0)),
+      },
+      recent: recentTasks,
+    }
+  } catch (error) {
+    logger.error(`Failed to get task stats for device ${device}:`, error)
+    throw error
+  }
+}
 
 // ============================================================================
 // User Operations

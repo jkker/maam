@@ -6,4 +6,4 @@ import { twMerge } from 'tailwind-merge'
 
 export const cn: typeof clsx = (...inputs) => twMerge(clsx(inputs))
 
-export const formatTaskType = (type: TaskType) => T[type] || type
+export const formatTaskType = (type: string) => T[type as TaskType] || type

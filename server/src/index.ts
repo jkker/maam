@@ -216,6 +216,10 @@ export const router = {
     yield* context.manager.listen('deviceLog', { signal })
   }),
 
+  stats: protectedProcedure.handler(async ({ context: { manager } }) => {
+    return await dbService.getTaskStats(manager.device)
+  }),
+
   eventCalendar: base.handler(async () => fetchUpcomingEvents()),
 }
 
