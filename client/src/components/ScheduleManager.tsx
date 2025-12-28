@@ -15,9 +15,10 @@ import {
 import { ScheduleXCalendar, useCalendarApp } from '@schedule-x/react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { CalendarIcon, Plus } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import 'temporal-polyfill/global'
 
+import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { useTheme } from '@/hooks/useTheme'
 import { cn, formatTaskType } from '@/lib/utils'
 
@@ -40,6 +41,7 @@ export const ScheduleManager = ({
   connected?: boolean
 }) => {
   const { resolvedTheme } = useTheme()
+  const isMobile = useMediaQuery('(max-width: 639px)')
 
   const [datetimeToAdd, setDateTimeToAdd] = useState<Temporal.ZonedDateTime>()
   const [scheduleIdToEdit, setScheduleIdEdit] = useState<string>()
@@ -56,6 +58,19 @@ export const ScheduleManager = ({
     }),
   )
 
+  // Dynamic calendar height: responsive using clamp-like logic
+  // Mobile: smaller height, Desktop: larger height
+  // Uses svh-inspired values but computed for the calendar API
+  const calendarHeight = useMemo(() => {
+    if (typeof window === 'undefined') return isMobile ? 400 : 600
+    // Mobile: clamp(300, 50svh, 450), Desktop: clamp(400, 55svh, 700)
+    const vh = window.innerHeight
+    if (isMobile) {
+      return Math.min(Math.max(300, vh * 0.5), 450)
+    }
+    return Math.min(Math.max(400, vh * 0.55), 700)
+  }, [isMobile])
+
   const calendar = useCalendarApp(
     {
       views: [createViewDay(), createViewWeek(), createViewList()],
@@ -66,7 +81,7 @@ export const ScheduleManager = ({
       locale: 'en-US',
       firstDayOfWeek: 1, // Monday
       weekOptions: {
-        gridHeight: 700,
+        gridHeight: calendarHeight,
       },
       calendars: {
         tasks: {

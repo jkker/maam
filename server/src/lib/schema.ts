@@ -64,13 +64,16 @@ export type ImmediateTask = typeof immediateTaskSchema.infer
 export const taskStageSchema = type("'PENDING' | 'RUNNING' | 'DONE'")
 export type TaskStage = typeof taskStageSchema.infer
 
-/** Task status schema (includes CANCELLED for internal use) */
-export const taskStatusSchema = type("'PENDING' | 'FAILED' | 'SUCCESS' | 'CANCELLED'")
-export type TaskStatus = typeof taskStatusSchema.infer
+/** Task status schema - permissive to handle third-party MAA updates */
+export const taskStatusSchema = type('string')
+export type TaskStatus = string
 
-/** Report status schema - subset for MAA client reports */
-export const reportStatusSchema = type("'FAILED' | 'SUCCESS'")
-export type ReportStatus = typeof reportStatusSchema.infer
+/**
+ * Report status schema - permissive to handle third-party MAA updates.
+ * Accepts any string and normalizes known values, defaults to original string.
+ */
+export const reportStatusSchema = type('string')
+export type ReportStatus = string
 
 // ============================================================================
 // API Input schemas - for request validation
@@ -79,17 +82,20 @@ export type ReportStatus = typeof reportStatusSchema.infer
 
 /** Device authentication schema for MAA client auth */
 export const deviceSchema = type({
-  device: 'string >= 10',
-  user: 'string',
+  device: 'string >= 1', // Permissive - accept any non-empty device ID
+  user: 'string >= 1',
 })
 export type Device = typeof deviceSchema.infer
 
-/** Task status report schema from MAA client */
+/**
+ * Task status report schema from MAA client.
+ * Highly permissive to handle third-party MAA updates - stores whatever is sent.
+ */
 export const reportSchema = type({
   user: 'string',
   device: 'string',
   task: 'string',
-  status: reportStatusSchema,
+  'status?': 'string', // Optional, accepts any string for flexibility with MAA updates
   'payload?': 'string',
 })
 export type Report = typeof reportSchema.infer

@@ -60,7 +60,6 @@ import {
 import { Alert, AlertDescription, AlertTitle } from './components/ui/alert'
 import { Badge } from './components/ui/badge'
 import { Button } from './components/ui/button'
-import { ButtonGroup } from './components/ui/button-group'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './components/ui/card'
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from './components/ui/empty'
 import { Field, FieldLabel } from './components/ui/field'
@@ -189,8 +188,8 @@ function ConfigViewer({
                   await navigator.clipboard.writeText(url)
                   setCopied(url)
                   setTimeout(() => setCopied(undefined), 2000)
-                } catch (err) {
-                  console.error('Failed to copy:', err)
+                } catch {
+                  toast.error('Failed to copy to clipboard')
                 }
               }}
             >
@@ -249,52 +248,62 @@ function QuickActions({ locked, connected }: { locked: boolean; connected: boole
   )
 
   return (
-    <div className="flex gap-2">
-      <ButtonGroup className="flex-1">
-        <Button
-          onClick={() => start.mutate(undefined)}
-          disabled={locked || !connected || start.isPending}
-          className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-3 font-medium transition-all duration-200 bg-blue-600 hover:bg-blue-700 text-white shadow-lg shadow-blue-500/30 hover:shadow-xl hover:shadow-blue-500/40 hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
-        >
-          <Play className="w-4 h-4" />
-          {start.isPending ? 'Starting...' : 'Start'}
-        </Button>
-        <Button
-          onClick={() => stop.mutate(undefined)}
-          disabled={!connected || stop.isPending}
-          className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-3 font-medium transition-all duration-200 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          <Square className="w-4 h-4" />
-          <span>{stop.isPending ? 'Stopping...' : 'Stop'}</span>
-        </Button>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild disabled={!connected}>
-            <Button className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-3 font-medium transition-all duration-200 bg-linear-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white shadow-lg shadow-purple-500/30 hover:shadow-xl hover:shadow-purple-500/40 hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100">
-              <Plus className="w-4 h-4" />
-              <span>Task</span>
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent>
-            {(
-              [
-                'LinkStart-Base',
-                'LinkStart-WakeUp',
-                'LinkStart-Combat',
-                'LinkStart-Recruiting',
-                'LinkStart-Mall',
-                'LinkStart-Mission',
-                'LinkStart-AutoRoguelike',
-                'LinkStart-Reclamation',
-                'HeartBeat',
-              ] as const
-            ).map((task) => (
-              <DropdownMenuItem key={task} onSelect={() => dispatch.mutate({ task })}>
-                {formatTaskType(task)}
-              </DropdownMenuItem>
-            ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </ButtonGroup>
+    <div className="grid grid-cols-2 sm:flex gap-2">
+      {/* Start Button */}
+      <Button
+        onClick={() => start.mutate(undefined)}
+        disabled={locked || !connected || start.isPending}
+        className="inline-flex items-center justify-center gap-2 font-medium transition-all duration-200 bg-blue-600 hover:bg-blue-700 text-white shadow-lg shadow-blue-500/30 hover:shadow-xl hover:shadow-blue-500/40 hover:scale-[1.02] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 sm:flex-1"
+        size="lg"
+      >
+        <Play className="size-4" />
+        <span className="sm:inline">{start.isPending ? 'Starting...' : 'Start'}</span>
+      </Button>
+
+      {/* Stop Button */}
+      <Button
+        onClick={() => stop.mutate(undefined)}
+        disabled={!connected || stop.isPending}
+        variant="outline"
+        size="lg"
+        className="inline-flex items-center justify-center gap-2 font-medium sm:flex-1"
+      >
+        <Square className="size-4" />
+        <span>{stop.isPending ? 'Stopping...' : 'Stop'}</span>
+      </Button>
+
+      {/* Task Dropdown */}
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild disabled={!connected}>
+          <Button
+            size="lg"
+            className="inline-flex items-center justify-center gap-2 font-medium transition-all duration-200 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white shadow-lg shadow-purple-500/30 hover:shadow-xl hover:shadow-purple-500/40 hover:scale-[1.02] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 sm:flex-1"
+          >
+            <Plus className="size-4" />
+            <span>Task</span>
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent className="w-48 min-w-fit">
+          {(
+            [
+              'LinkStart-Base',
+              'LinkStart-WakeUp',
+              'LinkStart-Combat',
+              'LinkStart-Recruiting',
+              'LinkStart-Mall',
+              'LinkStart-Mission',
+              'LinkStart-AutoRoguelike',
+              'LinkStart-Reclamation',
+              'HeartBeat',
+            ] as const
+          ).map((task) => (
+            <DropdownMenuItem key={task} onSelect={() => dispatch.mutate({ task })}>
+              {formatTaskType(task)}
+            </DropdownMenuItem>
+          ))}
+        </DropdownMenuContent>
+      </DropdownMenu>
+
       {/* Stage Selection Popover */}
       <Popover open={stagePopoverOpen} onOpenChange={setStagePopoverOpen}>
         <PopoverTrigger asChild>
@@ -305,10 +314,10 @@ function QuickActions({ locked, connected }: { locked: boolean; connected: boole
             className="px-3"
             title="Select stage to fight"
           >
-            <Settings2 className="w-4 h-4" />
+            <Settings2 className="size-4" />
           </Button>
         </PopoverTrigger>
-        <PopoverContent className="w-80 space-y-4">
+        <PopoverContent className="w-[calc(100vw-2rem)] max-w-80 space-y-4">
           <Autocomplete
             options={stageOptionsList}
             value={selectedStage}
@@ -931,7 +940,7 @@ export function LogViewer({ className }: { className?: string }) {
           Logs
         </CardTitle>
       </CardHeader>
-      <ScrollArea className="max-h-[500px] w-full pr-4 overflow-auto">
+      <ScrollArea className="max-h-[50svh] md:max-h-[500px] w-full pr-4 overflow-auto">
         <CardContent>
           <Accordion type="multiple">
             {logs.length === 0 ? (

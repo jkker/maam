@@ -2,6 +2,8 @@ import type { LogRecord, TaskRecord } from './schema'
 
 import munkres from 'munkres'
 
+import { logger } from './logger'
+
 /**
  * Cost function parameters for task-log assignment
  */
@@ -37,7 +39,8 @@ function parseTaskTimestamp(timestamp: string | undefined): Date | null {
     // Remove timezone name suffix like "[UTC]" if present
     const isoString = timestamp.split('[')[0]
     return new Date(isoString)
-  } catch {
+  } catch (error) {
+    logger.debug('Failed to parse task timestamp:', timestamp, error)
     return null
   }
 }
@@ -55,7 +58,8 @@ function parseLogTimestamp(timestamp: string | undefined): Date | null {
     // Convert to UTC by adding +08:00 offset
     const dateWithTz = new Date(timestamp + '+08:00')
     return dateWithTz
-  } catch {
+  } catch (error) {
+    logger.debug('Failed to parse log timestamp:', timestamp, error)
     return null
   }
 }
