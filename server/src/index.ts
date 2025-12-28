@@ -437,7 +437,23 @@ export const app = new Hono<{ Variables: VariablesContext }>()
 // In development, redirect all other routes to the Vite dev server
 if (import.meta.env.DEV) app.get('*', (c) => c.redirect('http://localhost:3113'))
 // In production, serve static files from the public directory
-else app.use(serveStatic({ root: 'dist/public', index: 'index.html' }))
+else
+  app.use(
+    serveStatic({
+      root: 'dist/public',
+      index: 'index.html',
+      onFound: (path, c) => {
+        // Disable caching for service worker, manifest, and index.html to ensure updates
+        if (
+          path.endsWith('sw.js') ||
+          path.endsWith('.webmanifest') ||
+          path.endsWith('index.html')
+        ) {
+          c.header('Cache-Control', 'no-cache, no-store, must-revalidate')
+        }
+      },
+    }),
+  )
 
 // Apply logging middleware in debug mode
 if (DEBUG) app.use(loggerMiddleware())

@@ -35,6 +35,12 @@ export default defineConfig({
         background_color: '#19181A',
         icons: [favicon],
       },
+      workbox: {
+        cleanupOutdatedCaches: true,
+        clientsClaim: true,
+        skipWaiting: true,
+        navigateFallbackDenylist: [/^\/rpc\//, /^\/maa\//],
+      },
     }),
   ],
   build: {
