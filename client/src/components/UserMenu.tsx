@@ -15,10 +15,10 @@ import {
 } from './ui/dropdown-menu'
 
 export function UserMenu() {
-  const { user, device, logout } = useAuthStore()
+  const { user, device } = useAuthStore()
 
   const handleLogout = () => {
-    logout()
+    useAuthStore.setState({ user: undefined, device: undefined, isAuthenticated: false })
     toast.info('Logged out successfully')
     // Reload to show auth modal
     window.location.reload()

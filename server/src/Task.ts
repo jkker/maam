@@ -1,4 +1,4 @@
-import type { TaskStage, TaskType, ImmediateTask } from './lib/schema'
+import type { TaskStage, TaskStatus, TaskType, ImmediateTask } from './lib/schema'
 
 import { EventEmitter } from 'events'
 
@@ -15,7 +15,7 @@ import { getNow } from './lib/temporal'
 
 export class Task extends EventEmitter<Record<TaskStage, [Task]>> {
   public payload?: string
-  public status?: 'SUCCESS' | 'FAILED' | 'CANCELLED'
+  public status?: TaskStatus
   public stage: TaskStage = 'PENDING'
   public startedAt?: Temporal.ZonedDateTime
   public completedAt?: Temporal.ZonedDateTime

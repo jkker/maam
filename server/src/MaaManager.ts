@@ -472,28 +472,30 @@ export class MaaManager extends EventEmitter<MaaManagerEventMap> {
   }
 
   public deviceLog(text: string) {
-    // replace "\n" with actual newlines and trim whitespace
-    text = text.replace(/\\n/g, '\n')
-    text = text.replaceAll('[TraceLogBrush]', '\t')
-    text = text.replaceAll('[MAA]', '')
-    // add newlines before all `[MM-DD` timestamps
-    text = text.replaceAll(/\[(\d{1,2}-)/g, '\n$1')
-    text = text.replaceAll(/(\d{1,2})\]/g, '$1')
-    // replace multiple newlines with a single newline
-    text = text.replaceAll(/\n+/g, '\n').trim()
-    // replace multiple tabs with a single tab
-    text = text.replaceAll(/\t+/g, '\t').trim()
-    // split and trim each line
-    text = text
-      .split('\n')
-      .map((line) => line.trim())
-      .join('\n')
+    // Minimal cleanup: normalize newlines and trim
+    text = text.replace(/\r\n/g, '\n').trim()
+
+    // If text is empty, ignore
+    if (!text) return
+
+    // Check if text already has a timestamp at the start
+    // Format: [YYYY-MM-DD HH:mm:ss] or [MM-DD HH:mm:ss]
+    const hasTimestamp = /^\[\d{2,4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}\]/.test(text)
+
+    if (!hasTimestamp) {
+      const timestamp = this.now.toPlainDateTime().toString().replace('T', ' ').split('.')[0]
+      text = `[${timestamp}] ${text}`
+    }
+
     this.logs.push(text)
     logger.info(`Received MAA Log:\n`, text)
 
     // Persist device log to database (async, non-blocking)
     const timestamp = this.now.toString()
-    dbService.saveDeviceLog(this.device, timestamp, 'Device Log', text).catch((error) => {
+    // We use the first line (truncated) as the title for the DB record if possible, or "Device Log"
+    const title = text.split('\n')[0].substring(0, 50) || 'Device Log'
+
+    dbService.saveDeviceLog(this.device, timestamp, title, text).catch((error) => {
       logger.error(`Failed to save device log to database:`, error)
     })
 

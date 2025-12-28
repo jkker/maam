@@ -1,7 +1,18 @@
+import arkenv from 'arkenv'
 import { createStream } from 'rotating-file-stream'
 import { Logger } from 'tslog'
-import * as z from 'zod'
-export const DEBUG = z.stringbool().default(false).parse(process.env.DEBUG)
+
+/**
+ * Environment configuration using arkenv (ArkType-based env parsing)
+ * Single source of truth for environment variables
+ */
+const env = arkenv({
+  // Parse DEBUG as string with explicit false default
+  DEBUG: "'true' | 'false' | '1' | '0' = 'false'",
+})
+
+export const DEBUG = env.DEBUG === 'true' || env.DEBUG === '1'
+
 export const logger = new Logger({
   minLevel: DEBUG ? 0 : 3, // Info and above
   hideLogPositionForProduction: !DEBUG,

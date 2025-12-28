@@ -23,8 +23,10 @@ export function Switch({ className, ...props }: React.ComponentProps<typeof Swit
   )
 }
 
-interface TriStateSwitchProps
-  extends Omit<React.ComponentProps<typeof SwitchPrimitive.Root>, 'checked' | 'onCheckedChange'> {
+interface TriStateSwitchProps extends Omit<
+  React.ComponentProps<typeof SwitchPrimitive.Root>,
+  'checked' | 'onCheckedChange'
+> {
   checked: boolean
   onCheckedChange?: (checked: boolean) => void
   loading?: boolean

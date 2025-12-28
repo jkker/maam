@@ -1,136 +1,218 @@
-import * as z from 'zod'
+/**
+ * Schema definitions using ArkType - Single Source of Truth
+ *
+ * All validation schemas and types are defined here using ArkType.
+ * Types are derived directly from schemas or DB schema - no duplicate declarations.
+ * Uses arkregex for type-safe regex patterns.
+ *
+ * @see https://arktype.io/docs/scopes
+ * @see https://github.com/arktypeio/arktype/tree/main/ark/regex
+ */
+import { regex } from 'arkregex'
+import { type } from 'arktype'
+import { createSelectSchema, createInsertSchema } from 'drizzle-arktype'
 
-import { TASK_TYPE, type IMMEDIATE_TASK } from '../const'
+import { IMMEDIATE_TASK, TASK_TYPE } from '../const'
+import * as dbSchema from './db/schema'
 
-export const reportSchema = z.object({
-  user: z.string(),
-  device: z.string(),
-  task: z.string(),
-  status: z.enum(['FAILED', 'SUCCESS']),
-  payload: z.string().optional(),
+// ============================================================================
+// Drizzle-ArkType schemas - Single Source of Truth from database schema
+// These schemas are inferred directly from Drizzle table definitions.
+// ============================================================================
+
+/** Schema for inserting new schedules into DB - inferred from Drizzle */
+export const scheduleDbInsertSchema = createInsertSchema(dbSchema.schedules)
+export type ScheduleDbInsert = typeof scheduleDbInsertSchema.infer
+
+/** Schema for selecting schedules from DB - inferred from Drizzle */
+export const scheduleDbSelectSchema = createSelectSchema(dbSchema.schedules)
+export type ScheduleDbSelect = typeof scheduleDbSelectSchema.infer
+
+/** Schema for inserting tasks into DB - inferred from Drizzle */
+export const taskDbInsertSchema = createInsertSchema(dbSchema.tasks)
+export type TaskDbInsert = typeof taskDbInsertSchema.infer
+
+/** Schema for selecting tasks from DB - inferred from Drizzle */
+export const taskDbSelectSchema = createSelectSchema(dbSchema.tasks)
+export type TaskDbSelect = typeof taskDbSelectSchema.infer
+
+/** Schema for selecting manager state from DB - inferred from Drizzle */
+export const managerStateDbSelectSchema = createSelectSchema(dbSchema.managerState)
+export type ManagerStateDbSelect = typeof managerStateDbSelectSchema.infer
+
+/** Schema for selecting devices from DB - inferred from Drizzle */
+export const deviceDbSelectSchema = createSelectSchema(dbSchema.devices)
+export type DeviceDbSelect = typeof deviceDbSelectSchema.infer
+
+/** Schema for device logs from DB - inferred from Drizzle */
+export const deviceLogDbSelectSchema = createSelectSchema(dbSchema.deviceLogs)
+export type DeviceLogDbSelect = typeof deviceLogDbSelectSchema.infer
+
+// ============================================================================
+// Core enumerated types - Single Source of Truth from const.ts
+// ============================================================================
+
+/** Task type schema - validates against TASK_TYPE constant */
+export const taskTypeSchema = type.enumerated(...TASK_TYPE)
+export type TaskType = typeof taskTypeSchema.infer
+
+/** Immediate task schema - validates against IMMEDIATE_TASK constant */
+export const immediateTaskSchema = type.enumerated(...IMMEDIATE_TASK)
+export type ImmediateTask = typeof immediateTaskSchema.infer
+
+/** Task stage schema - derived as literal union */
+export const taskStageSchema = type("'PENDING' | 'RUNNING' | 'DONE'")
+export type TaskStage = typeof taskStageSchema.infer
+
+/** Task status schema - permissive to handle third-party MAA updates */
+export const taskStatusSchema = type('string')
+export type TaskStatus = string
+
+/**
+ * Report status schema - permissive to handle third-party MAA updates.
+ * Accepts any string and normalizes known values, defaults to original string.
+ */
+export const reportStatusSchema = type('string')
+export type ReportStatus = string
+
+// ============================================================================
+// API Input schemas - for request validation
+// These transform API field names to match DB schema where needed.
+// ============================================================================
+
+/** Device authentication schema for MAA client auth */
+export const deviceSchema = type({
+  device: 'string >= 1', // Permissive - accept any non-empty device ID
+  user: 'string >= 1',
 })
+export type Device = typeof deviceSchema.infer
 
-export const deviceSchema = z.object({
-  device: z.string().min(10),
-  user: z.string(),
+/**
+ * Task status report schema from MAA client.
+ * Highly permissive to handle third-party MAA updates - stores whatever is sent.
+ */
+export const reportSchema = type({
+  user: 'string',
+  device: 'string',
+  task: 'string',
+  'status?': 'string', // Optional, accepts any string for flexibility with MAA updates
+  'payload?': 'string',
 })
-export const scheduleSchema = z.object({
-  hour: z.number().min(0).max(23),
-  minute: z.number().min(0).max(59).default(0).optional(),
-  task: z.enum(TASK_TYPE).optional().default('LinkStart'),
-  params: z.string().optional(),
-  timezone: z.string().optional(),
+export type Report = typeof reportSchema.infer
+
+/**
+ * Schedule input schema with defaults - API-facing schema
+ * Maps 'task' field to 'type' field in DB schema
+ */
+export const scheduleSchema = type({
+  hour: '0 <= number.integer <= 23',
+  minute: type('0 <= number.integer <= 59').default(0),
+  task: taskTypeSchema.default('LinkStart'),
+  'params?': 'string',
+  'timezone?': 'string',
 })
+export type Schedule = typeof scheduleSchema.infer
 
-export type Schedule = z.infer<typeof scheduleSchema>
-
-export type ScheduleWithMetadata = Schedule & {
-  id: string
-  lastRunTime?: string
-  runCount?: number
-  nextRunTime?: string
-}
-
-export const taskSchema = z.object({
-  id: z.string(),
-  type: z.enum(TASK_TYPE),
-  params: z.string().optional(),
-  stage: z.enum(['PENDING', 'RUNNING', 'DONE']),
-  status: z.enum(['PENDING', 'FAILED', 'SUCCESS']).optional(),
-  payload: z.string().optional(),
-  createdAt: z.string().optional(),
-  startedAt: z.string().optional(),
-  completedAt: z.string().optional(),
-  duration: z.number().optional(),
+/** Full task record schema - for validation of task data objects */
+export const taskRecordSchema = type({
+  id: 'string',
+  type: taskTypeSchema,
+  'params?': 'string',
+  stage: taskStageSchema,
+  'status?': taskStatusSchema,
+  'payload?': 'string',
+  'createdAt?': 'string',
+  'startedAt?': 'string',
+  'completedAt?': 'string',
+  'duration?': 'number',
 })
+export type TaskRecord = typeof taskRecordSchema.infer
 
-export type TaskRecord = z.infer<typeof taskSchema>
-export type TaskType = TaskRecord['type']
-export type ImmediateTask = (typeof IMMEDIATE_TASK)[number]
-export type TaskStage = TaskRecord['stage']
+// ============================================================================
+// Log schemas and parsing using ArkType pipe + arkregex
+// ============================================================================
 
-export const logRecordSchema = z.object({
-  timestamp: z.string(),
-  title: z.string(),
-  lines: z.array(
-    z.object({
-      timestamp: z.string(),
-      src: z.string(),
-      content: z.string(),
-    }),
-  ),
+/** Log line schema - single parsed log entry */
+export const logLineSchema = type({
+  timestamp: 'string',
+  src: 'string',
+  content: 'string',
 })
+export type LogLine = typeof logLineSchema.infer
 
-export type LogRecord = z.infer<typeof logRecordSchema>
+/** Log record schema - parsed device log with multiple lines */
+export const logRecordSchema = type({
+  timestamp: 'string',
+  title: 'string',
+  lines: logLineSchema.array(),
+})
+export type LogRecord = typeof logRecordSchema.infer
 
-export const logCodec = z.codec(z.string(), logRecordSchema, {
-  decode: (str) => {
-    // Split into main parts: timestamp|title|content
-    const [timestampStr, title, content] = str.split('|', 3)
-    // Parse main timestamp: "YYYY-MM-DD HH:mm:ss"
-    const [, year, month, day, hour, minute, second] =
-      timestampStr.match(/(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2}):(\d{2})/) || []
+/**
+ * Type-safe regex patterns using arkregex where possible.
+ *
+ * Note: arkregex provides compile-time type inference for capture groups,
+ * but has limitations with certain escape sequences (like `\n` in string form).
+ * For complex patterns with newlines, we fall back to native RegExp with
+ * named capture groups for runtime safety.
+ */
+const mainTimestampPattern = regex(
+  '^(?<year>\\d{4})-(?<month>\\d{2})-(?<day>\\d{2}) (?<hour>\\d{2}):(?<minute>\\d{2}):(?<second>\\d{2})',
+)
 
-    const timestamp = Temporal.PlainDateTime.from({
-      year: parseInt(year),
-      month: parseInt(month),
-      day: parseInt(day),
-      hour: parseInt(hour),
-      minute: parseInt(minute),
-      second: parseInt(second),
-    }).toString()
+// Complex pattern with newline matching requires native RegExp literal
+// (arkregex doesn't support \n in string patterns)
+const logLineRegex =
+  /\[(?<month>\d{2})-(?<day>\d{2})\s+(?<hour>\d{2}):(?<minute>\d{2}):(?<second>\d{2})\]\[(?<src>[^\]]+)\](?<content>[^\n]*(?:\n(?!\[)[^\n]*)*)/g
 
-    // Parse the structured log lines from content
-    // Format: [MM-DD  HH:mm:ss][Source]Message
-    const lines: { timestamp: string; src: string; content: string }[] = []
+/**
+ * Parse MAA device log format into structured LogRecord using ArkType morph.
+ * Format: "YYYY-MM-DD HH:mm:ss|title|content"
+ * Content format: "[MM-DD  HH:mm:ss][Source]Message"
+ *
+ * Uses arkregex for type-safe regex pattern matching where applicable.
+ */
+export const parseDeviceLog = type('string').pipe((str): LogRecord => {
+  const [timestampStr, title, content] = str.split('|', 3)
 
-    let match
-    while (
-      (match =
-        /\[(\d{2})-(\d{2})\s+(\d{2}):(\d{2}):(\d{2})\]\[([^\]]+)\]([^\n]*(?:\n(?!\[)[^\n]*)*)/g.exec(
-          content,
-        )) !== null
-    ) {
-      const [, monthStr, dayStr, hourStr, minuteStr, secondStr, src, contentStr] = match
+  // Parse main timestamp using type-safe regex
+  const match = mainTimestampPattern.exec(timestampStr || '')
+  if (!match?.groups) {
+    return { timestamp: new Date().toISOString(), title: title || '', lines: [] }
+  }
 
-      // Determine the year based on the main timestamp
-      // If the log line's month-day is after the main timestamp's, it's from previous year
-      const lineMonth = parseInt(monthStr)
-      const lineDay = parseInt(dayStr)
-      const mainMonth = parseInt(month)
-      const mainDay = parseInt(day)
+  const { year, month, day, hour, minute, second } = match.groups
+  const timestamp = `${year}-${month}-${day}T${hour}:${minute}:${second}`
 
-      let lineYear = parseInt(year)
-      if (lineMonth > mainMonth || (lineMonth === mainMonth && lineDay > mainDay)) {
-        lineYear -= 1
-      }
+  // Parse structured log lines from content
+  const lines: LogLine[] = []
 
-      const lineTimestamp = Temporal.PlainDateTime.from({
-        year: lineYear,
-        month: lineMonth,
-        day: lineDay,
-        hour: parseInt(hourStr),
-        minute: parseInt(minuteStr),
-        second: parseInt(secondStr),
-      }).toString()
+  // Reset regex state for global matching
+  logLineRegex.lastIndex = 0
+  let lineMatch
+  while ((lineMatch = logLineRegex.exec(content || '')) !== null) {
+    const groups = lineMatch.groups
+    if (!groups) continue
 
-      lines.push({
-        timestamp: lineTimestamp,
-        src: src.trim(),
-        content: contentStr.trim(),
-      })
+    // Determine year based on main timestamp
+    const lineMonth = parseInt(groups.month)
+    const lineDay = parseInt(groups.day)
+    const mainMonth = parseInt(month)
+    const mainDay = parseInt(day)
+
+    let lineYear = parseInt(year)
+    if (lineMonth > mainMonth || (lineMonth === mainMonth && lineDay > mainDay)) {
+      lineYear -= 1
     }
 
-    return {
-      timestamp,
-      title,
-      lines,
-    }
-  },
-  encode: (log) => {
-    const lines = log.lines
-      .map((line) => `[${line.timestamp}] [${line.src}] ${line.content}`)
-      .join('\n')
-    return `[${log.timestamp}] ${log.title}\n${lines}`
-  },
+    const lineTimestamp = `${lineYear}-${groups.month.padStart(2, '0')}-${groups.day.padStart(2, '0')}T${groups.hour.padStart(2, '0')}:${groups.minute.padStart(2, '0')}:${groups.second.padStart(2, '0')}`
+
+    lines.push({
+      timestamp: lineTimestamp,
+      src: groups.src.trim(),
+      content: groups.content.trim(),
+    })
+  }
+
+  return { timestamp, title: title || '', lines }
 })

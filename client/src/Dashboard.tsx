@@ -1,6 +1,7 @@
 import type { ScheduleData, TaskData } from '@maam/server'
 
 import { STAGE_OPTIONS } from '@maam/server/const'
+import { formatDuration, formatTime } from '@maam/server/lib/temporal'
 import { useMutation, useQuery } from '@tanstack/react-query'
 
 import {
@@ -44,6 +45,7 @@ import {
 } from '@/components/ui/input-group'
 
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { cn, formatTaskType } from '@/lib/utils'
 
 import { ScheduleManager } from './components/ScheduleManager'
 import { TaskStatusBadge } from './components/task-status-badge'
@@ -58,7 +60,6 @@ import {
 import { Alert, AlertDescription, AlertTitle } from './components/ui/alert'
 import { Badge } from './components/ui/badge'
 import { Button } from './components/ui/button'
-import { ButtonGroup } from './components/ui/button-group'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './components/ui/card'
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from './components/ui/empty'
 import { Field, FieldLabel } from './components/ui/field'
@@ -68,9 +69,7 @@ import { Spinner } from './components/ui/spinner'
 import { UserMenu } from './components/UserMenu'
 import { Footer, Header } from './Layout'
 import { useAuthStore } from './lib/auth-store'
-import { invalidateQueries } from './lib/orpc'
-import { useRPC } from './lib/use-rpc'
-import { cn, formatDuration, formatTaskType, formatTime } from './utils'
+import { invalidateQueries, useRPC } from './lib/orpc'
 
 export default function Dashboard() {
   const { orpc, isAuthenticated } = useRPC()
@@ -161,11 +160,12 @@ function ConfigViewer({
   className?: string
 }) {
   const [copied, setCopied] = useState<string>()
+  const { user, device } = useAuthStore()
 
   const urls = {
     'Get Task': baseURL + '/maa/getTask',
     'Report Status': baseURL + '/maa/reportStatus',
-    'Device Log Webhook': baseURL + '/maa/deviceLog',
+    'Device Log Webhook': `${baseURL}/maa/deviceLog?device=${device}&user=${user}`,
   }
 
   return (
@@ -179,7 +179,7 @@ function ConfigViewer({
       </CardHeader>
       <CardContent className="space-y-4">
         {Object.entries(urls).map(([label, url]) => (
-          <Field key={url} className="gap-2">
+          <Field key={label} className="gap-2">
             <FieldLabel htmlFor={url}>{label}</FieldLabel>
             <InputGroup
               onClick={async (e: React.MouseEvent) => {
@@ -188,8 +188,8 @@ function ConfigViewer({
                   await navigator.clipboard.writeText(url)
                   setCopied(url)
                   setTimeout(() => setCopied(undefined), 2000)
-                } catch (err) {
-                  console.error('Failed to copy:', err)
+                } catch {
+                  toast.error('Failed to copy to clipboard')
                 }
               }}
             >
@@ -248,52 +248,62 @@ function QuickActions({ locked, connected }: { locked: boolean; connected: boole
   )
 
   return (
-    <div className="flex gap-2">
-      <ButtonGroup className="flex-1">
-        <Button
-          onClick={() => start.mutate(undefined)}
-          disabled={locked || !connected || start.isPending}
-          className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-3 font-medium transition-all duration-200 bg-blue-600 hover:bg-blue-700 text-white shadow-lg shadow-blue-500/30 hover:shadow-xl hover:shadow-blue-500/40 hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
-        >
-          <Play className="w-4 h-4" />
-          {start.isPending ? 'Starting...' : 'Start'}
-        </Button>
-        <Button
-          onClick={() => stop.mutate(undefined)}
-          disabled={!connected || stop.isPending}
-          className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-3 font-medium transition-all duration-200 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          <Square className="w-4 h-4" />
-          <span>{stop.isPending ? 'Stopping...' : 'Stop'}</span>
-        </Button>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild disabled={!connected}>
-            <Button className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-3 font-medium transition-all duration-200 bg-linear-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white shadow-lg shadow-purple-500/30 hover:shadow-xl hover:shadow-purple-500/40 hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100">
-              <Plus className="w-4 h-4" />
-              <span>Task</span>
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent>
-            {(
-              [
-                'LinkStart-Base',
-                'LinkStart-WakeUp',
-                'LinkStart-Combat',
-                'LinkStart-Recruiting',
-                'LinkStart-Mall',
-                'LinkStart-Mission',
-                'LinkStart-AutoRoguelike',
-                'LinkStart-Reclamation',
-                'HeartBeat',
-              ] as const
-            ).map((task) => (
-              <DropdownMenuItem key={task} onSelect={() => dispatch.mutate({ task })}>
-                {formatTaskType(task)}
-              </DropdownMenuItem>
-            ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </ButtonGroup>
+    <div className="grid grid-cols-2 sm:flex gap-2">
+      {/* Start Button */}
+      <Button
+        onClick={() => start.mutate(undefined)}
+        disabled={locked || !connected || start.isPending}
+        className="inline-flex items-center justify-center gap-2 font-medium transition-all duration-200 bg-blue-600 hover:bg-blue-700 text-white shadow-lg shadow-blue-500/30 hover:shadow-xl hover:shadow-blue-500/40 hover:scale-[1.02] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 sm:flex-1"
+        size="lg"
+      >
+        <Play className="size-4" />
+        <span className="sm:inline">{start.isPending ? 'Starting...' : 'Start'}</span>
+      </Button>
+
+      {/* Stop Button */}
+      <Button
+        onClick={() => stop.mutate(undefined)}
+        disabled={!connected || stop.isPending}
+        variant="outline"
+        size="lg"
+        className="inline-flex items-center justify-center gap-2 font-medium sm:flex-1"
+      >
+        <Square className="size-4" />
+        <span>{stop.isPending ? 'Stopping...' : 'Stop'}</span>
+      </Button>
+
+      {/* Task Dropdown */}
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild disabled={!connected}>
+          <Button
+            size="lg"
+            className="inline-flex items-center justify-center gap-2 font-medium transition-all duration-200 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white shadow-lg shadow-purple-500/30 hover:shadow-xl hover:shadow-purple-500/40 hover:scale-[1.02] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 sm:flex-1"
+          >
+            <Plus className="size-4" />
+            <span>Task</span>
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent className="w-48 min-w-fit">
+          {(
+            [
+              'LinkStart-Base',
+              'LinkStart-WakeUp',
+              'LinkStart-Combat',
+              'LinkStart-Recruiting',
+              'LinkStart-Mall',
+              'LinkStart-Mission',
+              'LinkStart-AutoRoguelike',
+              'LinkStart-Reclamation',
+              'HeartBeat',
+            ] as const
+          ).map((task) => (
+            <DropdownMenuItem key={task} onSelect={() => dispatch.mutate({ task })}>
+              {formatTaskType(task)}
+            </DropdownMenuItem>
+          ))}
+        </DropdownMenuContent>
+      </DropdownMenu>
+
       {/* Stage Selection Popover */}
       <Popover open={stagePopoverOpen} onOpenChange={setStagePopoverOpen}>
         <PopoverTrigger asChild>
@@ -304,10 +314,10 @@ function QuickActions({ locked, connected }: { locked: boolean; connected: boole
             className="px-3"
             title="Select stage to fight"
           >
-            <Settings2 className="w-4 h-4" />
+            <Settings2 className="size-4" />
           </Button>
         </PopoverTrigger>
-        <PopoverContent className="w-80 space-y-4">
+        <PopoverContent className="w-[calc(100vw-2rem)] max-w-80 space-y-4">
           <Autocomplete
             options={stageOptionsList}
             value={selectedStage}
@@ -340,7 +350,7 @@ function ScreenshotViewer({ className }: { className?: string }) {
   const [imageError, setImageError] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
 
-  const { user, device } = useAuthStore()
+  const { screenshotURL } = useRPC()
 
   return (
     <Card className={cn('aspect-video overflow-hidden flex flex-col py-0 relative', className)}>
@@ -360,7 +370,7 @@ function ScreenshotViewer({ className }: { className?: string }) {
           </Empty>
         ) : (
           <img
-            src={`/maa/screenshot?user=${encodeURIComponent(user!)}&device=${encodeURIComponent(device!)}`}
+            src={screenshotURL}
             alt="Live screenshot"
             className="w-full h-full object-contain"
             onLoad={() => setIsLoading(false)}
@@ -665,11 +675,11 @@ function TaskManager({ className }: { className?: string }) {
             </Empty>
           </div>
         ) : (
-          <ScrollArea className="max-h-[24rem] md:max-h-[28rem] lg:max-h-[32rem]">
+          <ScrollArea className="max-h-96 md:max-h-112 lg:max-h-128">
             <div className="space-y-6 pr-4">
               {groups.map((group) => (
                 <section key={group.day.toString()} className="space-y-3">
-                  <div className="sticky top-0 z-10 -mx-4 border-b bg-card/95 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground backdrop-blur supports-[backdrop-filter]:bg-card/75">
+                  <div className="sticky top-0 z-10 -mx-4 border-b bg-card/95 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground backdrop-blur supports-backdrop-filter:bg-card/75">
                     <div className="flex items-baseline justify-between gap-2">
                       <span>{group.label}</span>
                       <span>
@@ -848,7 +858,9 @@ function TaskTimelineItem({
           <div>
             <span className="text-muted-foreground">Schedule timezone ({scheduleTimezone})</span>
             <p className="font-medium text-primary">
-              {runTime.toLocaleString(undefined, { timeStyle: 'short', timeZoneName: 'short' })}
+              {runTime.toLocaleString(undefined, {
+                timeStyle: 'short',
+              })}
             </p>
           </div>
           {schedule.params && (
@@ -928,7 +940,7 @@ export function LogViewer({ className }: { className?: string }) {
           Logs
         </CardTitle>
       </CardHeader>
-      <ScrollArea className="max-h-[500px] w-full pr-4 overflow-auto">
+      <ScrollArea className="max-h-[50svh] md:max-h-[500px] w-full pr-4 overflow-auto">
         <CardContent>
           <Accordion type="multiple">
             {logs.length === 0 ? (
@@ -937,12 +949,21 @@ export function LogViewer({ className }: { className?: string }) {
               </Empty>
             ) : (
               logs.map((log, idx) => {
-                const [title, content] = log.split('|', 2)
+                // Use the first line as the title, truncated if too long
+                const firstLine = log.split('\n')[0]
+                const title = firstLine.length > 80 ? firstLine.substring(0, 80) + '...' : firstLine
+
                 return (
-                  <AccordionItem key={idx} value={title} className="text-xs whitespace-pre-wrap">
-                    <AccordionTrigger className="font-normal py-2">{title}</AccordionTrigger>
+                  <AccordionItem
+                    key={idx}
+                    value={idx.toString()}
+                    className="text-xs whitespace-pre-wrap"
+                  >
+                    <AccordionTrigger className="font-normal py-2 text-left font-mono">
+                      {title}
+                    </AccordionTrigger>
                     <AccordionContent className="font-mono text-muted-foreground whitespace-pre-wrap text-[0.75rem]">
-                      {content.trim()}
+                      {log.trim()}
                     </AccordionContent>
                   </AccordionItem>
                 )

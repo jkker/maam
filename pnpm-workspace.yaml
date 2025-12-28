@@ -12,3 +12,6 @@ onlyBuiltDependencies:
   - sharp
   - simple-git-hooks
   - unrs-resolver
+
+overrides:
+  esbuild@<=0.24.2: '>=0.25.0'

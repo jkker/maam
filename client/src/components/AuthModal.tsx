@@ -3,7 +3,7 @@ import { useState } from 'react'
 import { toast } from 'sonner'
 
 import { useAuthStore } from '@/lib/auth-store'
-import { orpc } from '@/lib/orpc'
+import { useRPC } from '@/lib/orpc'
 
 import { Button } from './ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from './ui/dialog'
@@ -16,12 +16,11 @@ export function AuthModal() {
   const [deviceId, setDeviceId] = useState('')
   const [deviceName, setDeviceName] = useState('')
 
-  const { isAuthenticated, login } = useAuthStore()
-
+  const { orpc, isAuthenticated } = useRPC()
   const loginMutation = useMutation(
     orpc.auth.login.mutationOptions({
       onSuccess: (data) => {
-        login(data.user, data.device)
+        useAuthStore.setState({ user: data.user, device: data.device, isAuthenticated: true })
         toast.success('Authentication successful')
       },
       onError: (error) => {
