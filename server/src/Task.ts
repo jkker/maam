@@ -116,7 +116,7 @@ export class Task extends EventEmitter<Record<TaskStage, [Task]>> {
    * @returns The task instance once the event is observed.
    * @throws {@link Task.TimeoutError} Thrown when the task fails to emit the event in time.
    */
-  waitFor = async (stage: TaskStage, timeout: Temporal.DurationLike = { minutes: 1 }) => {
+  async waitFor(stage: TaskStage, timeout: Temporal.DurationLike = { minutes: 1 }) {
     if (this.stage === stage) return this
     const ms = Temporal.Duration.from(timeout).total('milliseconds')
     const eventPromise = EventEmitter.once(this, stage)

@@ -38,6 +38,7 @@
     "@hono/arktype-validator": "^2.0.1",
     "@hono/node-server": "^1.19.6",
     "@orpc/server": "^1.12.2",
+    "@tanstack/pacer": "^0.17.0",
     "arkenv": "^0.7.6",
     "arkregex": "^0.0.4",
     "arktype": "^2.1.28",
