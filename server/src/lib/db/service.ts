@@ -64,6 +64,16 @@ export async function getTaskStats(device: string) {
   }
 }
 
+export async function clearTaskHistory(device: string) {
+  try {
+    await db.delete(tasks).where(and(eq(tasks.device, device), eq(tasks.stage, 'DONE')))
+    logger.info(`Cleared task history for device: ${device}`)
+  } catch (error) {
+    logger.error(`Failed to clear task history for device ${device}:`, error)
+    throw error
+  }
+}
+
 // ============================================================================
 // User Operations
 // ============================================================================

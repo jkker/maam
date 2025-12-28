@@ -211,6 +211,12 @@ export const router = {
     yield* context.manager.listen('update', { signal })
   }),
 
+  clearHistory: protectedProcedure.handler(async ({ context: { manager } }) => {
+    await dbService.clearTaskHistory(manager.device)
+    manager.clearHistory()
+    return { success: true }
+  }),
+
   deviceLog: protectedProcedure.handler(async function* ({ context, signal }) {
     yield context.manager.logs.slice(-50)
     yield* context.manager.listen('deviceLog', { signal })

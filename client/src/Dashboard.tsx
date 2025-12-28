@@ -478,6 +478,16 @@ function TaskManager({ className }: { className?: string }) {
     }),
   )
 
+  const clearHistoryMutation = useMutation(
+    orpc.clearHistory.mutationOptions({
+      onSuccess: () => {
+        toast.success('Task history cleared')
+        void invalidateQueries()
+      },
+      onError: (error) => toast.error('Failed to clear history', { description: error.message }),
+    }),
+  )
+
   const busyScheduleIds = useMemo(() => {
     const ids = new Set<string>()
     if (postponeMutation.isPending && postponeMutation.variables)
@@ -632,15 +642,35 @@ function TaskManager({ className }: { className?: string }) {
 
   return (
     <Card className={cn(className, 'flex flex-col overflow-hidden pb-0 gap-0')}>
-      <CardHeader>
-        <CardTitle>
-          <ListTodo />
-          Tasks
-        </CardTitle>
-        <CardDescription className="text-xs text-muted-foreground">
-          Past {TIMELINE_WINDOW_DAYS} days &amp; next {TIMELINE_WINDOW_DAYS} days · Timezone:{' '}
-          {timezone}
-        </CardDescription>
+      <CardHeader className="flex flex-row items-start justify-between space-y-0">
+        <div className="space-y-1.5">
+          <CardTitle>
+            <ListTodo />
+            Tasks
+          </CardTitle>
+          <CardDescription className="text-xs text-muted-foreground">
+            Past {TIMELINE_WINDOW_DAYS} days &amp; next {TIMELINE_WINDOW_DAYS} days · Timezone:{' '}
+            {timezone}
+          </CardDescription>
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-8 gap-2 text-xs"
+          disabled={clearHistoryMutation.isPending}
+          onClick={() => {
+            if (confirm('Are you sure you want to clear all completed tasks?')) {
+              clearHistoryMutation.mutate(undefined)
+            }
+          }}
+        >
+          {clearHistoryMutation.isPending ? (
+            <Spinner className="size-3" />
+          ) : (
+            <Trash2 className="size-3" />
+          )}
+          Clear History
+        </Button>
       </CardHeader>
       <CardContent>
         <InputGroup>

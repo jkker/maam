@@ -2,6 +2,7 @@ import type { Schedule, TaskType } from './lib/schema'
 
 import { EventEmitter } from 'node:events'
 
+import { AsyncDebouncer } from '@tanstack/pacer'
 import sharp from 'sharp'
 import { Temporal } from 'temporal-polyfill'
 import { ToadScheduler } from 'toad-scheduler'
@@ -49,8 +50,21 @@ export class MaaManager extends EventEmitter<MaaManagerEventMap> {
   private streams = new Set<ReadableStreamDefaultController<Uint8Array>>()
 
   // Delayed unlock state
-  private unlockTimerId?: NodeJS.Timeout
   private unlockScheduledFor?: Temporal.ZonedDateTime
+
+  private unlockDebouncer = new AsyncDebouncer(
+    async (cooldown?: Temporal.DurationLike) => {
+      return this._performUnlock(cooldown)
+    },
+    { wait: 0 },
+  )
+
+  private lockDebouncer = new AsyncDebouncer(
+    async () => {
+      return this._performLock()
+    },
+    { wait: 0 },
+  )
 
   /**
    * @param device - Allowed Maa device identifier.
@@ -274,15 +288,16 @@ export class MaaManager extends EventEmitter<MaaManagerEventMap> {
    * @returns Information about any stopped task
    */
   public async lock(): Promise<LockResult> {
-    this.locked = true
+    this.unlockDebouncer.cancel()
+    this.unlockScheduledFor = undefined
+    const res = await this.lockDebouncer.maybeExecute()
+    return res ?? { success: true, message: 'Lock request merged' }
+  }
 
-    // Cancel any pending delayed unlock
-    if (this.unlockTimerId) {
-      clearTimeout(this.unlockTimerId)
-      this.unlockTimerId = undefined
-      this.unlockScheduledFor = undefined
-      logger.info('Cancelled pending delayed unlock due to lock request')
-    }
+  private async _performLock(): Promise<LockResult> {
+    if (this.locked) return { success: true, message: 'Already locked' }
+
+    this.locked = true
 
     // Persist lock state to database (async, non-blocking)
     dbService.updateManagerLockState(this.device, true).catch((error) => {
@@ -341,6 +356,7 @@ export class MaaManager extends EventEmitter<MaaManagerEventMap> {
     this.emit('update', this.state)
     return result
   }
+
   private unlockTime?: Temporal.ZonedDateTime
 
   /**
@@ -348,7 +364,18 @@ export class MaaManager extends EventEmitter<MaaManagerEventMap> {
    * @returns Information about next scheduled task and cooldown impact
    */
   public async unlock(cooldown: Temporal.DurationLike = { minutes: 10 }): Promise<UnlockResult> {
+    this.unlockDebouncer.setOptions({ wait: 0 })
+    this.lockDebouncer.cancel()
+    const res = await this.unlockDebouncer.maybeExecute(cooldown)
+    if (!res) return { success: true, message: 'Unlock request merged' }
+    return res
+  }
+
+  private async _performUnlock(
+    cooldown: Temporal.DurationLike = { minutes: 10 },
+  ): Promise<UnlockResult> {
     this.locked = false
+    this.unlockScheduledFor = undefined
     this.unlockTime = this.now
     const { schedules } = this
     logger.info(`Manager unlocked. Resumed ${schedules.length} schedules.`)
@@ -419,19 +446,33 @@ export class MaaManager extends EventEmitter<MaaManagerEventMap> {
     return result
   }
 
+  public clearHistory() {
+    let clearedCount = 0
+    for (const [id, task] of this.tasks) {
+      if (task.stage === 'DONE') {
+        this.tasks.delete(id)
+        clearedCount++
+      }
+    }
+    if (clearedCount > 0) {
+      this.emit('update', this.state)
+      logger.info(`Cleared ${clearedCount} completed tasks from memory`)
+    }
+    return clearedCount
+  }
+
   /**
    * Schedules a delayed unlock after the specified duration.
    * Cancels any existing scheduled unlock.
+
    * @param delay - Duration to wait before unlocking (default: 10 minutes)
    * @returns Information about when the unlock will occur
    */
   public scheduleUnlock(delay: Temporal.DurationLike = { minutes: 10 }) {
     if (!this.locked) return 'MAA已经在外面溜达了。'
 
-    if (this.unlockTimerId) {
-      clearTimeout(this.unlockTimerId)
-      logger.info('Cancelled previous delayed unlock')
-    }
+    this.unlockDebouncer.cancel()
+    this.lockDebouncer.cancel()
 
     const { now } = this
     const duration = Temporal.Duration.from(delay)
@@ -441,12 +482,8 @@ export class MaaManager extends EventEmitter<MaaManagerEventMap> {
     const delayMs = duration.total('milliseconds')
     logger.info(`Scheduling unlock for ${due.toString()} (in ${duration.toString()})`)
 
-    this.unlockTimerId = setTimeout(async () => {
-      logger.info('Executing delayed unlock')
-      this.unlockTimerId = undefined
-      this.unlockScheduledFor = undefined
-      await this.unlock()
-    }, delayMs)
+    this.unlockDebouncer.setOptions({ wait: delayMs })
+    void this.unlockDebouncer.maybeExecute()
 
     return `MAA将在${formatDuration(duration)}后出笼（${formatTime(due)}）。`
   }
@@ -456,9 +493,10 @@ export class MaaManager extends EventEmitter<MaaManagerEventMap> {
    * @returns true if a scheduled unlock was cancelled, false otherwise
    */
   public cancelScheduledUnlock(): boolean {
-    if (this.unlockTimerId) {
-      clearTimeout(this.unlockTimerId)
-      this.unlockTimerId = undefined
+    const wasPending = this.unlockDebouncer.store.state.isPending
+
+    if (wasPending || this.unlockScheduledFor) {
+      this.unlockDebouncer.cancel()
       this.unlockScheduledFor = undefined
       logger.info('Cancelled scheduled unlock')
       return true
