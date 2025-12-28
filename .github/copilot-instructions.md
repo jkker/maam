@@ -363,38 +363,125 @@ Keep all changes type-safe and properly formatted to avoid hook failures.
 
 ### Test Files
 
-- `server/src/index.test.ts` - integration tests for HTTP API routes
-- `server/src/MaaManager.test.ts` - unit tests for Task and MaaManager classes
+Current test coverage (75 tests passing):
+
+- `server/src/test/task.test.ts` - Task class unit tests (33 tests)
+- `server/src/test/router-public.test.ts` - Public oRPC procedures (7 tests)
+- `server/src/test/manager.test.ts` - MaaManager with device fixture (13 tests)
+- `server/src/test/assignment.test.ts` - Hungarian algorithm assignment (15 tests)
+- `server/src/test/unlock-endpoint.test.ts` - HTTP unlock endpoint (7 tests)
 
 ### Testing Patterns
 
-1. **Use the exported `app` and `manager`** from `server/src/index.ts` for integration tests
-2. **Use Hono's RPC client for testing routes**:
-   ```ts
-   const client = hc<RouteType>('/', { fetch: app.request })
-   const res = await client.maa.health.$get({ json: { device, user } })
-   ```
-3. **Freeze time for deterministic task IDs**:
-   ```ts
-   vi.spyOn(Temporal.Now, 'instant').mockReturnValue(frozenInstant)
-   ```
-4. **Mock scheduler** to avoid real timers:
-   ```ts
-   const schedulerStub = {
-     addCronJob: vi.fn(),
-     removeById: vi.fn(),
-     stop: vi.fn(),
-     getAllJobs: vi.fn().mockReturnValue([]),
-   } as unknown as ToadScheduler
-   manager.scheduler = schedulerStub
-   ```
-5. **Clean up manager state** in `beforeEach`/`afterEach` hooks when testing shared `manager` instance
+#### 1. oRPC Server-Side Testing
+
+Use `call()` from `@orpc/server` to test procedures directly:
+
+```ts
+import { call } from '@orpc/server'
+
+// Test public procedure
+const result = await call(router.auth.login, {
+  user: 'test-user',
+  device: 'test-device-0123456789',
+})
+
+// Test protected procedure (requires context)
+const result = await call(router.locked, undefined, { manager, user, device })
+```
+
+#### 2. Database Mocking
+
+Mock database service to avoid file I/O in unit tests:
+
+```ts
+vi.mock('../lib/db/service', () => ({
+  saveTask: vi.fn().mockResolvedValue(undefined),
+  updateTask: vi.fn().mockResolvedValue(undefined),
+  getTaskById: vi.fn().mockResolvedValue(null),
+  getUserOrCreate: vi.fn().mockResolvedValue({ id: 'user', name: 'user' }),
+  getDeviceOrCreate: vi.fn().mockResolvedValue({ id: 'device', user: 'user' }),
+  validateDeviceOwnership: vi.fn().mockResolvedValue(true),
+}))
+```
+
+#### 3. Device Fixtures
+
+Use `MaaDeviceFixture` to simulate MAA client behavior:
+
+```ts
+import { createTestManager } from '../test/fixture'
+
+const { manager, fixture } = createTestManager()
+fixture.startPolling() // Start polling tasks automatically
+
+// Wait for task completion
+const completedTask = await fixture.waitForTask(task.id, 2000)
+
+// Cleanup
+fixture.stopPolling()
+```
+
+#### 4. Temporal API for Time-Based Testing
+
+Use proper `Temporal.ZonedDateTime` for deterministic timestamps:
+
+```ts
+import { Temporal } from 'temporal-polyfill'
+
+const createdAt = Temporal.ZonedDateTime.from('2025-11-10T12:00:00[UTC]')
+const task = new Task('HeartBeat', createdAt)
+
+// Freeze time if needed
+vi.spyOn(Temporal.Now, 'instant').mockReturnValue(frozenInstant)
+```
+
+#### 5. Proper Resource Cleanup
+
+Always clean up resources to avoid test pollution:
+
+```ts
+beforeEach(() => {
+  vi.clearAllMocks()
+  try {
+    managerService.removeManager(testDevice, testUser)
+  } catch {
+    // Ignore if doesn't exist
+  }
+})
+
+afterEach(() => {
+  fixture.cleanup()
+  manager.scheduler.stop()
+  vi.clearAllMocks()
+  vi.clearAllTimers()
+})
+```
+
+#### 6. Testing Task Lifecycle
+
+Tasks transition through stages (PENDING → RUNNING → DONE):
+
+```ts
+const task = new Task('HeartBeat', createdAt)
+
+// Wait for stage transition
+await task.waitFor('RUNNING', { seconds: 5 })
+await task.waitFor('DONE', { seconds: 10 })
+
+// Test timeout handling
+await expect(task.waitFor('RUNNING', { milliseconds: 50 })).rejects.toThrow(Task.TimeoutError)
+```
 
 ### Running Tests
 
-- `pnpm test` - runs all tests once
-- `pnpm test:watch` - watch mode
-- Tests use Vitest with Node.js test environment
+- `pnpm test` - runs all tests once (75 tests)
+- `pnpm test:watch` - watch mode with interactive UI
+- `pnpm typecheck` - type-check all packages
+- `pnpm lint` - run ESLint
+- `pnpm ci` - full CI pipeline (build + lint + typecheck + test)
+
+Tests use Vitest with Node.js test environment and strict TypeScript mode.
 
 ## Client Architecture
 
