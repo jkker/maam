@@ -1,0 +1,9 @@
+{
+  "/": "Home",
+  "/about": "About",
+  "/demo": "Demos",
+  "/demo/table": "Table",
+  "/demo/form": "Form",
+  "/demo/query": "Query",
+  "/demo/storybook": "Storybook"
+}

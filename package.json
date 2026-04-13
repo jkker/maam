@@ -1,0 +1,115 @@
+{
+  "name": "react-2026-template",
+  "private": true,
+  "type": "module",
+  "imports": {
+    "#/*": [
+      "./src/*",
+      "./src/*.ts",
+      "./src/*.tsx"
+    ],
+    "#storybook/*": [
+      "./.storybook/*",
+      "./.storybook/*.ts",
+      "./.storybook/*.tsx"
+    ]
+  },
+  "scripts": {
+    "dev": "vp dev",
+    "build": "vp build",
+    "preview": "vp preview",
+    "storybook": "storybook dev -p 6006",
+    "storybook:build": "storybook build",
+    "test": "vp test",
+    "test:coverage": "vp test run --coverage",
+    "check": "vp check",
+    "fix": "vp check --fix",
+    "prepare": "vp config && playwright install chromium"
+  },
+  "dependencies": {
+    "@base-ui/react": "catalog:",
+    "@faker-js/faker": "catalog:",
+    "@tailwindcss/vite": "catalog:",
+    "@tanstack/match-sorter-utils": "catalog:",
+    "@tanstack/react-form": "catalog:",
+    "@tanstack/react-query": "catalog:",
+    "@tanstack/react-router": "catalog:",
+    "@tanstack/react-table": "catalog:",
+    "arkenv": "catalog:",
+    "arkregex": "catalog:",
+    "arktype": "catalog:",
+    "class-variance-authority": "catalog:",
+    "clsx": "catalog:",
+    "es-toolkit": "catalog:",
+    "i18next": "catalog:",
+    "i18next-browser-languagedetector": "catalog:",
+    "i18next-http-backend": "catalog:",
+    "lucide-react": "catalog:",
+    "prefill": "catalog:",
+    "react": "catalog:",
+    "react-dom": "catalog:",
+    "react-i18next": "catalog:",
+    "tailwind-merge": "catalog:",
+    "tailwindcss": "catalog:",
+    "temporal-polyfill": "catalog:",
+    "tw-animate-css": "catalog:",
+    "zustand": "catalog:",
+    "zustand-x": "catalog:"
+  },
+  "devDependencies": {
+    "@arkenv/vite-plugin": "catalog:",
+    "@commitlint/cli": "catalog:",
+    "@commitlint/config-conventional": "catalog:",
+    "@rolldown/plugin-babel": "catalog:",
+    "@storybook/addon-a11y": "catalog:",
+    "@storybook/addon-docs": "catalog:",
+    "@storybook/addon-themes": "catalog:",
+    "@storybook/react-vite": "catalog:",
+    "@tailwindcss/typography": "catalog:",
+    "@tanstack/devtools-vite": "catalog:",
+    "@tanstack/react-devtools": "catalog:",
+    "@tanstack/react-form-devtools": "catalog:",
+    "@tanstack/react-query-devtools": "catalog:",
+    "@tanstack/react-router-devtools": "catalog:",
+    "@tanstack/router-plugin": "catalog:",
+    "@total-typescript/ts-reset": "catalog:",
+    "@types/node": "catalog:",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "@typescript/native-preview": "catalog:",
+    "@vitejs/devtools": "catalog:",
+    "@vitejs/plugin-react": "catalog:",
+    "@vitest/coverage-v8": "catalog:",
+    "babel-plugin-react-compiler": "catalog:",
+    "eslint-plugin-react-hooks": "catalog:",
+    "knip": "catalog:",
+    "msw-storybook-addon": "catalog:",
+    "playwright": "catalog:",
+    "remark-gfm": "catalog:",
+    "storybook": "catalog:",
+    "typescript": "catalog:",
+    "vite": "catalog:",
+    "vite-plus": "catalog:",
+    "vitest": "catalog:",
+    "vitest-browser-react": "catalog:",
+    "zx": "catalog:"
+  },
+  "commitlint": {
+    "extends": [
+      "@commitlint/config-conventional"
+    ]
+  },
+  "devEngines": {
+    "packageManager": {
+      "name": "pnpm",
+      "onFail": "ignore",
+      "version": "^10"
+    },
+    "runtime": {
+      "name": "node",
+      "onFail": "error",
+      "version": "^24"
+    }
+  },
+  "packageManager": "pnpm@10.33.0"
+}

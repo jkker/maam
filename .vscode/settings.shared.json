@@ -1,0 +1,133 @@
+{
+  "chat.useAgentSkills": true,
+  "cSpell.enabled": true,
+  "cSpell.words": ["arktype", "arkenv", "arkregex", "commitlint", "oxfmt", "oxlint", "tsgo"],
+  "editor.codeActionsOnSave": {
+    "source.addMissingImports.ts": "explicit",
+    "source.fixAll.oxc": "explicit",
+    "source.fixAll.sortJSON": "never",
+    "source.fixAll.ts": "explicit",
+    "source.organizeImports": "never",
+    "source.removeUnusedImports.ts": "explicit",
+    "source.sortImports.ts": "never"
+  },
+  "editor.defaultFormatter": "oxc.oxc-vscode",
+  "editor.formatOnPaste": true,
+  "editor.formatOnSave": true,
+  "editor.formatOnSaveMode": "file",
+  "editor.insertSpaces": true,
+  "editor.linkedEditing": true,
+  // allow autocomplete for ArkType expressions like "string | num"
+  "editor.quickSuggestions": {
+    "strings": "on"
+  },
+  "editor.rulers": [100],
+  "editor.stickyScroll.enabled": true,
+  "editor.tabSize": 2,
+  "emmet.showExpandedAbbreviation": "never",
+  "explorer.fileNesting.enabled": true,
+  "explorer.fileNesting.patterns": {
+    ".env": "*.env, .env.*, .envrc, env.d.ts",
+    ".gitignore": ".gitattributes, .gitmodules, .gitmessage, .lfsconfig, .mailmap, .git-blame*",
+    ".npmrc": ".npmrc.*",
+    ".oxlintrc.json": ".oxfmtrc.json, .prettierrc.json, .dependency-cruiser.js, knip.json, lint-staged.config.js, .stylelintrc.json, .commitlintrc.json",
+    "*.css": "$(capture).css.map, $(capture).*.css",
+    "*.db": "${capture}.${extname}-*",
+    "*.db3": "${capture}.${extname}-*",
+    "*.js": "$(capture).js.map, $(capture).*.js, $(capture)_*.js, $(capture).d.ts, $(capture).d.ts.map, $(capture).js.flow",
+    "*.jsx": "$(capture).js, $(capture).*.jsx, $(capture)_*.js, $(capture)_*.jsx, $(capture).css, $(capture).module.css, $(capture).less, $(capture).module.less, $(capture).module.less.d.ts, $(capture).scss, $(capture).module.scss, $(capture).module.scss.d.ts",
+    "*.py": "$(capture).pyi",
+    "*.s3db": "${capture}.${extname}-*",
+    "*.sdb": "${capture}.${extname}-*",
+    "*.sqlite": "${capture}.${extname}-*",
+    "*.sqlite3": "${capture}.${extname}-*",
+    "*.ts": "$(capture).js, $(capture).d.ts.map, $(capture).*.ts, $(capture)_*.js, $(capture)_*.ts",
+    "*.tsx": "$(capture).ts, $(capture).*.ts, $(capture).*.tsx, $(capture)_*.ts, $(capture)_*.tsx, $(capture).css, $(capture).module.css, $(capture).less, $(capture).module.less, $(capture).module.less.d.ts, $(capture).scss, $(capture).module.scss, $(capture).module.scss.d.ts, $(capture).css.ts",
+    "AGENTS.md": ".clinerules, .cursorrules, .replit.md, .windsurfrules, AGENT.md, CLAUDE.local.md, CLAUDE.md, GEMINI.md",
+    "Dockerfile": "*.dockerfile, .devcontainer.*, .dockerignore, captain-definition, compose.*, docker-compose.*, dockerfile*",
+    "package.json": "package-lock.json, yarn.lock, pnpm-lock.yaml, bun.lockb, bun.lock, pnpm-workspace.*, nx.json",
+    "pyproject.toml": ".commitlint*, .cspell*, .dlint.json, .dprint.json*, .editorconfig, .flake8, .flowconfig, .isort.cfg, .jslint*, .lintstagedrc*, .ls-lint.yml, .markdownlint*, .oxfmtrc.json, .oxfmtrc.json.bak, .oxlintrc.json, .oxlintrc.json.bak, .pdm-python, .pdm.toml, .prettier*, .pylintrc, .python-version, .ruff.toml, .shellcheckrc, .stylelint*, .textlint*, .xo-config*, .yamllint*, MANIFEST.in, Pipfile, Pipfile.lock, alejandra.toml, biome.json*, commitlint*, cspell*, dangerfile*, dlint.json, dprint.json*, hatch.toml, lint-staged*, pdm.lock, phpcs.xml, poetry.lock, poetry.toml, prettier*, pyproject.toml, pyrightconfig.json, requirements*.in, requirements*.pip, requirements*.txt, ruff.toml, setup.cfg, setup.py, stylelint*, tox.ini, tslint*, uv.lock, uv.toml, xo.config.*",
+    "tsconfig.json": "tsconfig*.tsbuildinfo, tsconfig.*.json",
+    "vite.config.*": ".babelrc*, .codecov, .cssnanorc*, .envrc, .htmlnanorc*, .lighthouserc.*, .mocha*, .postcssrc*, .terserrc*, api-extractor.json, ava.config.*, babel.config.*, capacitor.config.*, content.config.*, contentlayer.config.*, cssnano.config.*, cypress.*, env.d.ts, formkit.config.*, formulate.config.*, histoire.config.*, htmlnanorc.*, i18n.config.*, ionic.config.*, jasmine.*, jest.config.*, jsconfig.*, karma*, lighthouserc.*, panda.config.*, playwright.config.*, postcss.config.*, puppeteer.config.*, react-router.config.*, rspack.config.*, sst.config.*, svgo.config.*, tailwind.config.*, tsconfig.*, tsdoc.*, uno.config.*, unocss.config.*, vitest.config.*, vuetify.config.*, webpack.config.*, windi.config.*"
+  },
+  "files.associations": {
+    "**/*.css": "tailwindcss"
+  },
+  "files.autoSave": "afterDelay",
+  "files.exclude": {
+    ".vercel": true,
+    "**/.DS_Store": true,
+    "**/.eslintcache": true,
+    "**/.git": true,
+    "**/.hg": true,
+    "**/.svn": true,
+    "**/.tanstack": true,
+    "**/.venv": true,
+    "**/*.tsbuildinfo": true,
+    "**/Thumbs.db": true,
+    "skills-lock.json": true
+  },
+  "files.readonlyInclude": {
+    "**/routeTree.gen.ts": true,
+    "pnpm-lock.yaml": true
+  },
+  "files.watcherExclude": {
+    "**/routeTree.gen.ts": true
+  },
+  "git.autofetch": true,
+  "git.confirmSync": false,
+  "git.enableSmartCommit": true,
+  "github.copilot.chat.agent.autoFix": true,
+  "github.copilot.chat.codesearch.enabled": true,
+  "github.copilot.chat.commitMessageGeneration.instructions": [
+    {
+      "text": "Generate a commit message. Strictly adheres to Conventional Commits.\n\nStructure\n<type>(<scope>): <subject>\n\n<body>\n\nRequirements\n\n* Type: feat, fix, docs, style, refactor, perf, test, chore.\n* Subject: Use imperative mood (e.g., \"Add\" not \"Added\"), start uncapitalized, do not end with a period, limit to 50 characters.\n* Body: Separate from subject with a blank line. Explain *what* and *why*, not *how*. Body's lines must not be longer than 100 characters.\n* Breaking Changes: Indicate with ! after type and BREAKING CHANGE: footer."
+    }
+  ],
+  "github.copilot.chat.generateTests.codeLens": true,
+  "github.copilot.chat.languageContext.fix.typescript.enabled": true,
+  "github.copilot.chat.languageContext.inline.typescript.enabled": true,
+  "github.copilot.chat.languageContext.typescript.enabled": true,
+  "github.copilot.enable": {
+    "*": true,
+    "log": false,
+    "markdown": true,
+    "plaintext": true,
+    "scminput": false
+  },
+  "github.copilot.nextEditSuggestions.enabled": true,
+  "github.copilot.nextEditSuggestions.fixes": true,
+  "js/ts.experimental.useTsgo": true,
+  "js/ts.implementationsCodeLens.showOnInterfaceMethods": true,
+  "js/ts.implicitProjectConfig.checkJs": true,
+  "js/ts.implicitProjectConfig.experimentalDecorators": true,
+  "js/ts.implicitProjectConfig.target": "ESNext",
+  "js/ts.native-preview.tsdk": "node_modules/@typescript/native-preview",
+  "js/ts.preferences.autoImportSpecifierExcludeRegexes": [
+    "node:test",
+    "node:dns",
+    "dns",
+    "^(node:)?os$" // prioritize ArkType's "type" for autoimports
+  ],
+  "js/ts.preferences.importModuleSpecifier": "relative",
+  "js/ts.preferences.includePackageJsonAutoImports": "auto",
+  "js/ts.preferences.jsxAttributeCompletionStyle": "auto",
+  "js/ts.referencesCodeLens.enabled": true,
+  "js/ts.referencesCodeLens.showOnAllFunctions": true,
+  "js/ts.tsdk": "./node_modules/typescript/lib",
+  "js/ts.updateImportsOnFileMove.enabled": "always",
+  "mdx.server.enable": true,
+  "oxc.fixKind": "all",
+  "oxc.fmt.configPath": "./vite.config.ts",
+  "search.exclude": {
+    ".github/skills/**": true,
+    "**/.venv": true,
+    "**/*.code-search": true,
+    "**/assets/fonts/*": true,
+    "**/dist": true,
+    "**/node_modules": true,
+    "**/routeTree.gen.ts": true,
+    "pnpm-lock.yaml": true
+  },
+  "tailwindCSS.classFunctions": ["cn", "cva", "clsx"]
+}

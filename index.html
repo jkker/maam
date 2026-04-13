@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="A modern web app built with React 19, Vite, TanStack Router, and Tailwind CSS."
+    />
+    <script>
+      ;(() => {
+        try {
+          var raw = localStorage.getItem('theme')
+          var t = 'system'
+          if (raw) {
+            try {
+              var p = JSON.parse(raw)
+              if (p && p.state) t = p.state.theme || 'system'
+            } catch (e) {
+              if (raw === 'dark' || raw === 'light') t = raw
+            }
+          }
+          if (t !== 'dark' && t !== 'light' && t !== 'system') t = 'system'
+          var d = matchMedia('(prefers-color-scheme: dark)').matches
+          var r = t === 'system' ? (d ? 'dark' : 'light') : t
+          var h = document.documentElement
+          h.classList.remove('light', 'dark')
+          h.classList.add(r)
+          h.style.colorScheme = r
+        } catch (e) {}
+      })()
+    </script>
+    <title>Web Dev Template</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

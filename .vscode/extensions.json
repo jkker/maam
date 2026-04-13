@@ -1,0 +1,16 @@
+{
+  "recommendations": [
+    "github.copilot-chat", // AI code completion and suggestions for faster prototyping
+    "streetsidesoftware.code-spell-checker", // Spell checking in code, markdown, and comments
+    "usernamehw.errorlens", // Inline highlights for errors/warnings directly in the editor
+    "eamodio.gitlens", // Git blame/history, code authorship, and repository insights
+    "swellaby.workspace-config-plus", // Support .vscode/settings.shared.json for shared workspace settings
+    "hverlin.mise-vscode", // mise support for Visual Studio code (dev-tools, tasks and environment variables)
+    "YoavBls.pretty-ts-errors", // Make TypeScript errors more human-readable
+    "bradlc.vscode-tailwindcss", // Tailwind CSS IntelliSense for class name autocompletion and linting
+    "arktypeio.arkdark", // Syntax highlighting and inline errors for ArkType
+    "VoidZero.vite-plus-extension-pack", // Essential extensions for Vite+ development
+    "typescriptteam.native-preview", // Experimental native TypeScript service for better performance
+    "pkief.material-icon-theme" // Material Design icons for files and folders
+  ]
+}

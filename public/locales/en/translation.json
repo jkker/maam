@@ -1,0 +1,97 @@
+{
+  "examples": {
+    "title": "Examples",
+    "subtitle": "Demonstrations of temporal-polyfill, Drawer component, and Zustand state management",
+    "taskManager": {
+      "title": "Task Manager",
+      "newTask": "New Task",
+      "noTasks": "No tasks yet. Create your first task!",
+      "clearCompleted": "Clear Completed",
+      "all": "All",
+      "active": "Active",
+      "completed": "Completed",
+      "status": {
+        "todo": "To Do",
+        "inProgress": "In Progress",
+        "done": "Done"
+      },
+      "priority": {
+        "low": "Low",
+        "medium": "Medium",
+        "high": "High"
+      },
+      "drawer": {
+        "title": "Create New Task",
+        "description": "Add a new task to your list",
+        "titleField": "Title",
+        "descriptionField": "Description",
+        "titlePlaceholder": "Task title",
+        "descriptionPlaceholder": "Task description",
+        "addTask": "Add Task",
+        "cancel": "Cancel"
+      }
+    },
+    "temporal": {
+      "title": "Temporal Polyfill Examples",
+      "sections": {
+        "formatting": {
+          "title": "Date/Time Formatting",
+          "full": "Full format:",
+          "long": "Long format:",
+          "short": "Short format:"
+        },
+        "relative": {
+          "title": "Relative Time",
+          "future": "5 days from now:",
+          "past": "2 days ago:"
+        },
+        "duration": {
+          "title": "Duration & Time Helpers",
+          "duration": "Duration (2h 30m 45s):",
+          "daysUntil": "Days until 5 days from now:",
+          "isOverdue": "Is 5 days from now overdue?",
+          "isDueSoon": "Is 5 days from now due soon?"
+        },
+        "numbers": {
+          "title": "Number & Currency Formatting",
+          "currency": "Currency ($1,234.56):",
+          "decimal": "Decimal (3.14159):",
+          "percent": "Percent (75.5%):"
+        }
+      }
+    },
+    "technicalNotes": {
+      "title": "Technical Implementation Notes",
+      "zustand": {
+        "title": "Zustand State Management",
+        "items": [
+          "Strict TypeScript interfaces for type safety",
+          "External mutations declared outside store",
+          "Sparse updates with setState()",
+          "Computed selectors for derived state",
+          "Arktype runtime validation for inputs"
+        ]
+      },
+      "drawer": {
+        "title": "Drawer Component",
+        "items": [
+          "Sheet-style drawer for mobile-first design",
+          "Controlled open/close state",
+          "Smooth animations with Tailwind",
+          "Accessible with proper ARIA attributes"
+        ]
+      },
+      "temporal": {
+        "title": "Temporal Polyfill",
+        "items": [
+          "Temporal API for modern date/time handling",
+          "Intl.DateTimeFormat for localized formatting",
+          "Intl.RelativeTimeFormat for human-readable times",
+          "Intl.DurationFormat for duration representation",
+          "Intl.NumberFormat for numbers and currency",
+          "Immutable operations with Temporal types"
+        ]
+      }
+    }
+  }
+}

@@ -1,0 +1,105 @@
+# Dependency directories
+node_modules/
+**/node_modules/
+
+# Build output
+**/dist
+.next
+storybook-static
+
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+.pnpm-debug.log*
+
+# Diagnostic reports
+report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Compiled binary addons
+build/Release
+
+# TypeScript cache
+*.tsbuildinfo
+tsconfig.tmp.json
+tsconfig.*.tsbuildinfo
+
+# Vitest
+coverage/
+tsconfig.vitest-temp.json
+vite.config.ts.timestamp*
+test-runner-profile
+__screenshots__
+
+# Playwright
+/test-results/
+/playwright-report/
+/playwright/.cache/
+/.playwright-cli/
+
+# Environment files
+.env
+.env.*local
+.env.keys
+
+# Patch/Temp
+.npmrc
+.repositories
+.sources.list
+
+# VSCode
+.vscode-test
+!.vscode
+.vscode/*
+!.vscode/extensions.json
+!.vscode/launch.json
+# See https://marketplace.visualstudio.com/items?itemName=swellaby.workspace-config-plus
+!.vscode/*.shared.json
+
+# Yarn v2
+.yarn/cache
+.yarn/unplugged
+.yarn/build-state.yml
+.yarn/install-state.gz
+.pnp.*
+
+# Optional caches
+.npm
+.eslintcache
+.stylelintcache
+.node_repl_history
+
+# Nx specific ignores
+.nx/cache
+.nx/workspace-data
+.cursor/rules/nx-rules.mdc
+.github/instructions/nx.instructions.md
+
+
+# Folder view configuration files
+.DS_Store
+Desktop.ini
+Thumbs.db
+
+# Temporary files
+/tmp
+./*.zip
+tmp*
+.codex
+
+# Playwright
+playwright-report
+test-results
+.playwright-mcp
+.vitest-attachments
+junit-test-report.xml
+data/sqlite.db

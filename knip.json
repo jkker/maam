@@ -1,0 +1,24 @@
+{
+  "$schema": "https://unpkg.com/knip/schema.json",
+  "ignoreExportsUsedInFile": {
+    "interface": true,
+    "type": true
+  },
+  "ignoreIssues": {
+    "src/components/ui/**/*": ["exports", "files"],
+    "src/hooks/**": ["exports"],
+    "src/stores/**": ["exports"],
+    "src/lib/regex.ts": ["exports"],
+    "scripts/**/*": ["exports", "files"]
+  },
+  "ignoreDependencies": [
+    "@types/*",
+    "@vitejs/devtools",
+    "@commitlint/cli",
+    "eslint-plugin-react-hooks",
+    "zx"
+  ],
+  "tailwind": {
+    "entry": "src/index.css"
+  }
+}
