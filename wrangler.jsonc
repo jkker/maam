@@ -1,0 +1,49 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "maam",
+  "main": "worker/index.ts",
+  "compatibility_date": "2025-04-01",
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
+  // Durable Object bindings
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "INSTANCE_DO",
+        "class_name": "InstanceDO",
+      },
+    ],
+  },
+  // SQLite-backed DO migration
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": [
+        "InstanceDO"
+      ],
+    },
+  ],
+  // Environment variables
+  "vars": {
+    "ENVIRONMENT": "development",
+  },
+  // Assets for SPA
+  "assets": {
+    "directory": "./dist",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+  },
+  // Development settings
+  "dev": {
+    "port": 8787,
+    "local_protocol": "http",
+  },
+  // Bundle alias for subpath imports
+  "alias": {
+    "#shared": "./shared",
+    "#worker": "./worker",
+  },
+  "preview_urls": true,
+  "workers_dev": true
+}

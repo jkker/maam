@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as DemoRouteImport } from './routes/demo'
 import { Route as AboutRouteImport } from './routes/about'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as InstancesInstanceIdRouteImport } from './routes/instances/$instanceId'
 import { Route as DemoTableRouteImport } from './routes/demo/table'
 import { Route as DemoStorybookRouteImport } from './routes/demo/storybook'
 import { Route as DemoQueryRouteImport } from './routes/demo/query'
@@ -30,6 +31,11 @@ const AboutRoute = AboutRouteImport.update({
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const InstancesInstanceIdRoute = InstancesInstanceIdRouteImport.update({
+  id: '/instances/$instanceId',
+  path: '/instances/$instanceId',
   getParentRoute: () => rootRouteImport,
 } as any)
 const DemoTableRoute = DemoTableRouteImport.update({
@@ -61,6 +67,7 @@ export interface FileRoutesByFullPath {
   '/demo/query': typeof DemoQueryRoute
   '/demo/storybook': typeof DemoStorybookRoute
   '/demo/table': typeof DemoTableRoute
+  '/instances/$instanceId': typeof InstancesInstanceIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -70,6 +77,7 @@ export interface FileRoutesByTo {
   '/demo/query': typeof DemoQueryRoute
   '/demo/storybook': typeof DemoStorybookRoute
   '/demo/table': typeof DemoTableRoute
+  '/instances/$instanceId': typeof InstancesInstanceIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -80,6 +88,7 @@ export interface FileRoutesById {
   '/demo/query': typeof DemoQueryRoute
   '/demo/storybook': typeof DemoStorybookRoute
   '/demo/table': typeof DemoTableRoute
+  '/instances/$instanceId': typeof InstancesInstanceIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -91,6 +100,7 @@ export interface FileRouteTypes {
     | '/demo/query'
     | '/demo/storybook'
     | '/demo/table'
+    | '/instances/$instanceId'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -100,6 +110,7 @@ export interface FileRouteTypes {
     | '/demo/query'
     | '/demo/storybook'
     | '/demo/table'
+    | '/instances/$instanceId'
   id:
     | '__root__'
     | '/'
@@ -109,12 +120,14 @@ export interface FileRouteTypes {
     | '/demo/query'
     | '/demo/storybook'
     | '/demo/table'
+    | '/instances/$instanceId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AboutRoute: typeof AboutRoute
   DemoRoute: typeof DemoRouteWithChildren
+  InstancesInstanceIdRoute: typeof InstancesInstanceIdRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -138,6 +151,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/instances/$instanceId': {
+      id: '/instances/$instanceId'
+      path: '/instances/$instanceId'
+      fullPath: '/instances/$instanceId'
+      preLoaderRoute: typeof InstancesInstanceIdRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/demo/table': {
@@ -191,6 +211,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AboutRoute: AboutRoute,
   DemoRoute: DemoRouteWithChildren,
+  InstancesInstanceIdRoute: InstancesInstanceIdRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
